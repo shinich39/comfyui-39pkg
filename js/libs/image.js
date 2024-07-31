@@ -80,6 +80,10 @@ function startQueue() {
   app.queuePrompt(0, app.ui.batchCount);
 }
 
+async function cancelQueue() {
+  await api.interrupt();
+}
+
 function setAutoQueue() {
   if (!isAutoQueueMode()) {
     document.querySelector("input[name='AutoQueueMode']")?.click();
@@ -882,44 +886,13 @@ function initParentNode() {
         }
       }
 
-      // const getLastImageNodes = function() {
-      //   let nodes = [];
-      //   for (const node of app.graph._nodes) {
-      //     const isValidNode = isVirtualMode === isVirtualNode(node);
-      //     const isLastNode = !node.outputs || !!node.outputs.find(e => e.links && e.links.length > 0);
-      //     const isImageNode = node.inputs && !!node.inputs.find(e => e.type.toUpperCase() === "IMAGE");
-      //     if (isValidNode && isLastNode && isImageNode) {
-      //       nodes.push(returnNodeObject(node));
-      //     }
-      //   }
-      //   return nodes;
-      // }
-
-      // const getFirstLatentNodes = function() {
-      //   let nodes = [];
-      //   for (const node of app.graph._nodes) {
-      //     const isValidNode = isVirtualMode === isVirtualNode(node);
-      //     const isFirstNode = !node.inputs || !node.inputs.find(e => e.link);
-      //     const isLatentNode = node.outputs && !!node.outputs.find(e => e.type.toUpperCase() === "LATENT");
-      //     if (isValidNode && isFirstNode && isLatentNode) {
-      //       nodes.push(returnNodeObject(node));
-      //     }
-      //   }
-      //   return nodes;
-      // }
-
-      // const getFirstImageNodes = function() {
-      //   let nodes = [];
-      //   for (const node of app.graph._nodes) {
-      //     const isValidNode = isVirtualMode === isVirtualNode(node);
-      //     const isFirstNode = !node.inputs || !node.inputs.find(e => e.link);
-      //     const isLatentNode = node.outputs && !!node.outputs.find(e => e.type.toUpperCase() === "IMAGE");
-      //     if (isValidNode && isFirstNode && isLatentNode) {
-      //       nodes.push(returnNodeObject(node));
-      //     }
-      //   }
-      //   return nodes;
-      // }
+      const bypassAllNodes = function() {
+        for (const node of app.graph._nodes) {
+          if (isVirtualNode(node)) {
+            node.mode = 4;
+          }
+        }
+      }
 
       const ignoreErrorMessage = function() {
         if (!self.pkg39.ignoreErrorMessage) {
@@ -1004,15 +977,14 @@ function initParentNode() {
           const enable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), false)};
           const disable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true) };
           const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
-          // const bypassLastImages = () => { bypassNodes(getLastImageNodes()) };
-          // const bypassFirstImages = () => { bypassNodes(getFirstImageNodes()) };
-          // const bypassFirstLatents = () => { bypassNodes(getFirstLatentNodes()) };
+          const disableAll = bypassAllNodes;
           const create = createNode;
           const ignore = ignoreErrorMessage;
           const sound = playSound;
           const start = () => { startQueue(); }
+          const cancel = () => { cancelQueue(); }
           const loop = () => { setAutoQueue(); }
-          const stop = () => { unsetAutoQueue(); }
+          const stop = () => { unsetAutoQueue(); cancelQueue(); }
           const next = () => { nextQueue(); }
           let error = (err) => { console.error(err); };
           let __command__ = getCommandValue();
@@ -1253,9 +1225,11 @@ function initCommandNode() {
   text += `\n// remove("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// enable("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;
+  text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
   text += `\n// ignore(): Ignore error message before move mouse.`;
   text += `\n// sound(): Play the sound once.`;
   text += `\n// start(): Start queue.`;
+  text += `\n// cancel(): Cancel current queue.`;
   text += `\n// loop(): Enable auto queue mode.`;
   text += `\n// stop(): Disable auto queue mode.`;
   text += `\n// next(): Load next image.`;

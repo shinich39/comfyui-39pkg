@@ -82,7 +82,7 @@ vae_encode.connectInput("VAE", findOne("Load Checkpoint"));
 vae_encode.connectOutput("LATENT", findOne("KSampler"));
 ```
 
-- Disable all ending point image nodes
+- Disable all image nodes that has placed ending point
 ```js
 // case 1
 disable("Preview Image");

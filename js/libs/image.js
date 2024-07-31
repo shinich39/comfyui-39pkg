@@ -1136,7 +1136,6 @@ function initParentNode() {
         // increase counts
         this.pkg39.countQueues += 1;
         let n = this.pkg39.getIndex();
-        console.log(n, i)
         if (m === "increment" && n < i) {
           this.pkg39.countLoops += 1;
         } else if (m === "decrement" && n > i) {

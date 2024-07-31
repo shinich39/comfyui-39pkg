@@ -85,11 +85,11 @@ vae_encode.connectOutput("LATENT", findOne("KSampler"));
 - Disable all ending point image nodes
 ```js
 // case 1
-bypass("Preview Image");
+disable("Preview Image");
 
 // case 2
 find("Save Image").forEach(e => {
-  if (e.isEnd) { e.bypass() }
+  if (e.isEnd) { e.disable() }
 });
 ```
 

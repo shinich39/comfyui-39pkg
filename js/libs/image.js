@@ -1136,9 +1136,10 @@ function initParentNode() {
         // increase counts
         this.pkg39.countQueues += 1;
         let n = this.pkg39.getIndex();
-        if (m === "increment" && n <= i) {
+        console.log(n, i)
+        if (m === "increment" && n < i) {
           this.pkg39.countLoops += 1;
-        } else if (m === "decrement" && n >= i) {
+        } else if (m === "decrement" && n > i) {
           this.pkg39.countLoops += 1;
         }
       } catch(err) {
@@ -1229,7 +1230,7 @@ function initCommandNode() {
     const nodeTitle = node.title;
     text += `var n${nodeIndex++} = findOneById(${nodeId}); // ${nodeTitle}\n`;
   }
-  
+
   text += `\n// You can use javascript code here!`;
   text += `\n// The code is executed after rendered new image workflow.`;
   text += `\n// Image workflow has been set default range.`;

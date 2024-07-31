@@ -954,16 +954,16 @@ function initParentNode() {
       const removeAllNodes = function() {
         for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
           const n = app.graph._nodes[i];
-          if (getParentId(n) === id) {
+          if (getParentId(n) === self.id) {
             app.graph.remove(n);
           }
         }
       }
 
-      const bypassAllNodes = function() {
+      const bypassAllNodes = function(b = true) {
         for (const node of app.graph._nodes) {
           if (isVirtualNode(node)) {
-            node.mode = 4;
+            node.mode = b ? 4 : 0;
           }
         }
       }
@@ -1058,9 +1058,10 @@ function initParentNode() {
           const findOneLast = findNodeByNameFromLast;
           const findOneById = findNodeById;
           const enable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), false)};
+          const enableAll = () => { bypassAllNodes(false) };
           const disable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true) };
-          const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
           const disableAll = bypassAllNodes;
+          const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
           const removeAll = removeAllNodes;
           const create = createNode;
           const ignore = ignoreErrorMessage;
@@ -1307,7 +1308,9 @@ function initCommandNode() {
   text += `\n// findOneById(id) => Node: Only search for original workflow.`;
   text += `\n// create("TYPE") => Node: Create a new node in image workflow.`;
   text += `\n// remove("TYPE"|"TITLE"|NodeArray)`;
+  text += `\n// removeAll(): Remove all nodes in virtual workflow.`;
   text += `\n// enable("TYPE"|"TITLE"|NodeArray)`;
+  text += `\n// enableAll(): Enable all nodes in virtual workflow.`;
   text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
   text += `\n// ignore(): Ignore error message before move mouse.`;

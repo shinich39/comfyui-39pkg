@@ -353,6 +353,11 @@ function initParentNode() {
       this.pkg39.FILENAME.value = imageName;
       this.pkg39.INDEX.value = i;
 
+      if (!isInitialized) {
+        return;
+      }
+
+      // render image workflow
       try {
         const m = await this.pkg39.getMetadata();
         try {
@@ -395,12 +400,80 @@ function initParentNode() {
         return newNodeMaps;
       }
 
+      // remove "Load image node" in virtual canvas
+      // remove "Command node" in virtual canvas
+      function convertWorkflow(w, prevConnectedTargets) {
+        let nodeIds = [];
+        for (let i = w.nodes.length - 1; i >= 0; i--) {
+          const n = w.nodes[i];
+          const id = n.id;
+          // remove nodes
+          if (n.type === "LoadImage39") {
+            w.nodes.splice(i, 1);
+            nodeIds.push(id);
+          } else if (n.type === "Command39") {
+            // command does not have input and outputs
+            w.nodes.splice(i, 1);
+          }
+        }
+
+        let linkIds = [];
+        for (let i = w.links.length - 1; i >= 0; i--) {
+          const l = w.links[i];
+          const type = l[5];
+          const id = l[0];
+          const originId = l[1];
+          const targetId = l[3];
+          // remove links
+          if (nodeIds.indexOf(originId) > -1) {
+            w.links.splice(i, 1);
+            linkIds.push(id);
+            prevConnectedTargets.push({
+              type: type,
+              id: targetId,
+            }); 
+          }
+        }
+
+        for (const node of w.nodes) {
+          // remove input link
+          if (node.inputs) {
+            for (const input of node.inputs) {
+              if (!input.link) {
+                continue;
+              }
+              if (linkIds.indexOf(input.link) > -1) {
+                input.link = null
+              }
+            }
+          }
+
+          // remove output links
+          // if (node.outputs) {
+          //   for (const output of node.outputs) {
+          //     if (output.links) {
+          //       for (let i = output.links.length - 1; i >= 0; i--) {
+          //         const linkId = output.links[i];
+          //         if (linkIds.indexOf(linkId) > -1) {
+          //           output.links.splice(i, 1);
+          //         }
+          //       }
+          //     }
+          //   }
+          // }
+        }
+
+        return w;
+      }
+
       const self = this;
-      const samplerNodes = getSamplerNodes({ workflow, prompt });
+      let prevConnectedTargets = [];
+      workflow = convertWorkflow(workflow, prevConnectedTargets);
+      let samplerNodes = getSamplerNodes({ workflow, prompt });
       let nodeMaps = samplerNodes.map(e => getNodeMap({ workflow, prompt, sampler: e }));
       nodeMaps.sort((a, b) => b.length - a.length); // put the long map in front of array
-      const graph = new LGraph(workflow);
-      const canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
+      let graph = new LGraph(workflow);
+      let canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
 
       // set properties
       // disable specific nodes
@@ -417,14 +490,6 @@ function initParentNode() {
         // lock added Symbol()?
         if (n.flags) {
           n.flags.pinned = false;
-        }
-
-        // remove "Load image node" in virtual canvas
-        // remove "Command node" in virtual canvas
-        if (n.comfyClass === "39LoadImage" || n.type === "39LoadImage") {
-          graph.remove(n);
-        } else if (n.comfyClass === "39Command" || n.type === "39Command") {
-          graph.remove(n);
         }
       }
 
@@ -542,7 +607,7 @@ function initParentNode() {
                 let outputNode;
                 let outputSlot;
                 if (input.link) {
-                  const link = app.graph.links.find(e => e && e.id === input.link);
+                  const link = app.graph.links?.find(e => e && e.id === input.link);
                   outputNode = app.graph._nodes.find(e => e.id === link.origin_id);
                   outputSlot = link.origin_slot;
 
@@ -564,7 +629,7 @@ function initParentNode() {
                   // fix error links size updated during process
                   const links = JSON.parse(JSON.stringify(output.links));
                   for (const linkId of links) {
-                    const link = app.graph.links.find(e => e && e.id === linkId);
+                    const link = app.graph.links?.find(e => e && e.id === linkId);
                     const inputNode = app.graph._nodes.find(e => e.id === link.target_id);
                     const inputSlot = link.target_slot;
   
@@ -593,7 +658,7 @@ function initParentNode() {
               return;
             }
 
-            const link = app.graph.links.filter(e => e && e.id === input.link);
+            const link = app.graph.links?.find(e => e && e.id === input.link);
             if (!link) {
               return;
             }
@@ -643,7 +708,7 @@ function initParentNode() {
               return [];
             }
 
-            const links = app.graph.links.filter(e => e && output.links.indexOf(e.id) > -1);
+            const links = app.graph.links?.filter(e => e && output.links.indexOf(e.id) > -1);
             if (!links || links.length < 1) {
               return [];
             }
@@ -714,7 +779,7 @@ function initParentNode() {
             const widgetValues = [];
             if (node.inputs) {
               for (const input of node.inputs) {
-                const link = app.graph.links.find(e => e && e.id === input.link);
+                const link = app.graph.links?.find(e => e && e.id === input.link);
                 if (link && link.type) {
                   const n = app.graph._nodes.find(e => e.id === link.origin_id);
                   inputNodes.push({
@@ -886,6 +951,15 @@ function initParentNode() {
         }
       }
 
+      const removeAllNodes = function() {
+        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
+          const n = app.graph._nodes[i];
+          if (getParentId(n) === id) {
+            app.graph.remove(n);
+          }
+        }
+      }
+
       const bypassAllNodes = function() {
         for (const node of app.graph._nodes) {
           if (isVirtualNode(node)) {
@@ -951,13 +1025,22 @@ function initParentNode() {
           .then(() => { renderCanvas() });
       }
 
-      ;(() => {
-        if (!isInitialized) {
-          // console.error(new Error("pkg39 has not been initialized."));
-          return;
+      const prevConnectedLinks = prevConnectedTargets.map(t => {
+        const node = returnNodeObject(app.graph._nodes.find(e => getOriginalId(e) === t.id));
+        return {
+          node,
+          type: t.type,
         }
+      }).filter(e => !!e.node);
+
+      ;(() => {
         try {
           const MAIN = returnNodeObject(self);
+
+          // reconnect load image node
+          for (const { node, type } of prevConnectedLinks) {
+            MAIN.connectOutput(type, node);
+          }
 
           const increaseErrors = () => { self.pkg39.countErrors += 1; }
           const resetErrors = () => { self.pkg39.countErrors = 0; }
@@ -978,6 +1061,7 @@ function initParentNode() {
           const disable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true) };
           const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
           const disableAll = bypassAllNodes;
+          const removeAll = removeAllNodes;
           const create = createNode;
           const ignore = ignoreErrorMessage;
           const sound = playSound;

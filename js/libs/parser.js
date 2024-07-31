@@ -47,7 +47,7 @@ function getNodeMap({ workflow, prompt, sampler }) {
 
     for (const output of node.outputs) {
       for (const link of output) {
-        const n = link?.inputNode;
+        const n = link?.targetNode;
         if (n) {
           searchForward(w, acc, i + 1, n.id);
         }
@@ -68,7 +68,7 @@ function getNodeMap({ workflow, prompt, sampler }) {
     }
 
     for (const link of node.inputs) {
-      const n = link?.outputNode;
+      const n = link?.originNode;
       if (n) {
         searchBackward(w, acc, i + 1, n.id);
       }
@@ -82,10 +82,10 @@ function getNodeMap({ workflow, prompt, sampler }) {
         return {
           id: l.id ?? l[0],
           type: l.type ?? l[5],
-          outputNode: w.nodes.find((e) => e.id === (l.origin_id ?? l[1])),
-          outputSlot: (l.origin_slot ?? l[2]),
-          inputNode: w.nodes.find((e) => e.id === (l.target_id ?? l[3])),
-          inputSlot: (l.target_slot ?? l[4]),
+          originNode: w.nodes.find((e) => e.id === (l.origin_id ?? l[1])),
+          originSlot: (l.origin_slot ?? l[2]),
+          targetNode: w.nodes.find((e) => e.id === (l.target_id ?? l[3])),
+          targetSlot: (l.target_slot ?? l[4]),
         }
       });
 
@@ -162,7 +162,7 @@ function getLastNode({ workflow, sampler }) {
           console.error(`${link.type} is not LATENT or IMAGE`);
           continue;
         }
-        const n = link.inputNode;
+        const n = link.targetNode;
         search(w, acc, i + 1, n.id);
       }
     }
@@ -175,10 +175,10 @@ function getLastNode({ workflow, sampler }) {
         return {
           id: l.id,
           type: l.type,
-          outputNode: w.nodes.find((e) => e.id === l.origin_id),
-          outputSlot: l.origin_slot,
-          inputNode: w.nodes.find((e) => e.id === l.target_id),
-          inputSlot: l.target_slot,
+          originNode: w.nodes.find((e) => e.id === l.origin_id),
+          originSlot: l.origin_slot,
+          targetNode: w.nodes.find((e) => e.id === l.target_id),
+          targetSlot: l.target_slot,
         }
       });
 

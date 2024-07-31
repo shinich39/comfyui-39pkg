@@ -1249,6 +1249,7 @@ function initCommandNode() {
   text += `\n// findOne("TYPE"|"TITLE") => Node`;
   text += `\n// findOneLast("TYPE"|"TITLE") => Node`;
   text += `\n// findOneById(id) => Node: Only search for original workflow.`;
+  text += `\n// create("TYPE") => Node: Create a new node in image workflow.`;
   text += `\n// remove("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// enable("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;

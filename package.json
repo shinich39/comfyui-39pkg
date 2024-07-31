@@ -1,0 +1,15 @@
+{
+  "name": "comfyui-pkg39",
+  "version": "1.0.0",
+  "description": "This package has created for generate image from generated image and embedded workflow.",
+  "type": "module",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node test/index.js"
+  },
+  "author": "shinichi39 <shinich39@gmail.com>",
+  "license": "MIT"
+}

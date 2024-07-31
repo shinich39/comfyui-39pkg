@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-pkg39"
+description = "This package has created for generate image from generated image and embedded workflow."
+version = "1.0.0"
+license = { file = "LICENSE" }
+
+[project.urls]
+Repository = "https://github.com/shinich39/comfyui-pkg39"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "shinich39"
+DisplayName = "comfyui-pkg39"
+Icon = ""

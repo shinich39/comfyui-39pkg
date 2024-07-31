@@ -1219,17 +1219,17 @@ function initCommandNode() {
 
   let text = ``;
   let nodeIndex = 1;
-  for (const node of app.graph._nodes) {
-    const isCommNode = isCommandNode(node);
-    const isValidNode = isVirtualNode(node);
+  const nodes = app.graph._nodes
+    .filter(e => !!e && !isCommandNode(e) && !isVirtualNode(e))
+    .sort((a, b) => a.id - b.id)
+
+  for (const node of nodes) {
     const nodeId = node.id;
     const nodeType = node.type;
     const nodeTitle = node.title;
-
-    if (!isCommNode && !isValidNode) {
-      text += `var n${nodeIndex++} = findOneById(${nodeId}); // ${nodeTitle}\n`;
-    }
+    text += `var n${nodeIndex++} = findOneById(${nodeId}); // ${nodeTitle}\n`;
   }
+  
   text += `\n// You can use javascript code here!`;
   text += `\n// The code is executed after rendered new image workflow.`;
   text += `\n// Image workflow has been set default range.`;

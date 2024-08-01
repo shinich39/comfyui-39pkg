@@ -691,11 +691,7 @@ function initParentNode() {
               return false;
             }
             if (outputNode.isPkg39) {
-              if (outputNode.node) {
-                outputNode = outputNode.node;
-              } else {
-                return false;
-              }
+              outputNode = outputNode.node;
             }
             const inputNode = node;
             const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
@@ -714,7 +710,7 @@ function initParentNode() {
             }
             return true;
           },
-          getOutputs: function(name) {
+          getOutput: function(name) {
             if (!name) {
               return [];
             }
@@ -737,41 +733,31 @@ function initParentNode() {
 
             return outputNodes.map(e => returnNodeObject(e));
           },
-          connectOutput: function(name, inputNode) {
-            if (!name || !inputNode) {
+          connectOutput: function(name, inputNodes) {
+            if (!name || !inputNodes) {
               return false;
             }
-            if (inputNode.isPkg39) {
-              if (inputNode.node) {
-                inputNode = inputNode.node;
-              } else {
-                return false;
-              }
+            if (!Array.isArray(inputNodes)) {
+              inputNodes = [inputNodes];
             }
             const outputNode = node;
             const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
             if (output) {
               const outputSlot = outputNode.findOutputSlot(output.name);
               const outputType = output.type.toUpperCase();
-              const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === outputType);
-              if (input) {
-                const inputSlot = inputNode.findInputSlot(input.name);
-                if (input.link) {
-                  inputNode.disconnectInput(inputSlot);
+              for (let inputNode of inputNodes) {
+                if (inputNode.isPkg39) {
+                  inputNode = inputNode.node;
                 }
-                outputNode.connect(outputSlot, inputNode, inputSlot);
-                app.graph.setDirtyCanvas(false, true);
-              }
-            }
-            return true;
-          },
-          connectOutputs: function(name, inputNodes) {
-            if (!name || !inputNodes) {
-              return false;
-            }
-            if (Array.isArray(inputNodes)) {
-              for (const n of inputNodes) {
-                this.connectOutput(name, n);
+                const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === outputType);
+                if (input) {
+                  const inputSlot = inputNode.findInputSlot(input.name);
+                  if (input.link) {
+                    inputNode.disconnectInput(inputSlot);
+                  }
+                  outputNode.connect(outputSlot, inputNode, inputSlot);
+                  app.graph.setDirtyCanvas(false, true);
+                }
               }
             }
             return true;
@@ -790,7 +776,7 @@ function initParentNode() {
               w = Math.floor(width * w);
             }
 
-            const outputNodes = this.getOutputs("LATENT");
+            const outputNodes = this.getOutput("LATENT");
             const inputNodes = [];
             const widgetValues = [];
             if (node.inputs) {
@@ -1101,11 +1087,11 @@ function initParentNode() {
           let error = (err) => { console.error(err); };
           let __command__ = getCommandValue();
           __command__ = `
-            try {
-              ${__command__}
-            } catch(err) {
-              error(err);
-            }`;
+try {
+  ${__command__}
+} catch(err) {
+  error(err);
+}`;
           eval(__command__.trim());
         } catch(err) {
           console.error(err);
@@ -1268,6 +1254,7 @@ function initParentNode() {
     const modeWidget = this.pkg39.MODE;
     const maskWidget = this.pkg39.MASK;
 
+    dpWidget.options.getMinHeight = () => 64;
     dpWidget.options.getMaxHeight = () => 64;
     dpWidget.prevValue = dpWidget.value;
     dpWidget.callback = function(currValue) {
@@ -1287,8 +1274,7 @@ function initParentNode() {
     // initialize after create
     this.pkg39.updateDirPath();
 
-    // fix node size
-    setTimeout(() => { renderCanvas() }, 256);
+    renderCanvas();
   } catch(err) {
     console.error(err);
   }
@@ -1363,9 +1349,8 @@ function initCommandNode() {
   text += `\n// node.replace(Node): Change all connections with the other same type node.`;
   text += `\n// node.getInput("INPUT_NAME") => Node`;
   text += `\n// node.connectInput("INPUT_NAME", Node): Connect to output of target node.`;
-  text += `\n// node.getOutputs("OUTPUT_NAME") => NodeArray`;
-  text += `\n// node.connectOutput("OUTPUT_NAME", Node): Connect to input of target node.`;
-  text += `\n// node.connectOutputs("OUTPUT_NAME", NodeArray): Connect to input of target nodes.`;
+  text += `\n// node.getOutput("OUTPUT_NAME") => NodeArray`;
+  text += `\n// node.connectOutput("OUTPUT_NAME", Node|NodeArray): Connect to input of target node.`;
   text += `\n// node.remove()`;
   text += `\n// node.enable()`;
   text += `\n// node.disable()`;

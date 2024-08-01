@@ -104,10 +104,16 @@ find("Save Image").forEach(e => {
 
 - Set specific checkpoint 
 ```js
+// case 1
 var node = findOneById(1); // Load Checkpoint
-node.connectOutputs("MODEL", find("KSampler"));
-node.connectOutputs("CLIP", find("CLIPTextEncode"));
-node.connectOutputs("VAE", find("VAE Decode"));
+node.connectOutput("MODEL", findOneLast("KSampler"));
+node.connectOutput("CLIP", find("CLIPTextEncode"));
+node.connectOutput("VAE", find("VAE Decode"));
+
+// case 2
+var ckpt_name = node.getValue("ckpt_name");
+var nodes = find("Load Checkpoint");
+nodes.forEach(n => n.setValue("ckpt_name", ckpt_name));
 ```
 
 - Setting a callback when error occurred on the Commnad node

@@ -12,6 +12,10 @@ const MASK_COLOR = {r: 0, g: 0, b: 0, rgb: "rgb(0,0,0)", };
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
+const MIN_SEED = 0;
+const MAX_SEED = parseInt("0xffffffffffffffff", 16);
+const STEPS_OF_SEED = 10;
+
 
 // add notification element
 const AUDIO_ELEMENT = document.createElement("audio");
@@ -54,6 +58,7 @@ function showError(err) {
       }
     }
   }
+
   if (msg) {
     app.ui.dialog.show(msg);
     renderCanvas();
@@ -65,7 +70,7 @@ function hideError() {
   app.lastNodeErrors = null;
 }
 
-function isErrored() {
+function isErrorOccurred() {
   return app.lastNodeErrors && Object.keys(app.lastNodeErrors).length > 0;
   // if (app.ui?.dialog?.element) {
   //   return app.ui.dialog.element.style.display !== "none" && 
@@ -848,6 +853,12 @@ function initParentNode() {
           bypass: function(b = true) {
             node.mode = b ? 4 : 0;
           },
+          serialize: function() {
+            try {
+              return node.serialize();
+            } catch(err) {
+            }
+          },
         }
       }
 
@@ -988,7 +999,7 @@ function initParentNode() {
       // const ignoreErrorMessage = function() {
       //   if (!self.pkg39.ignoreErrorMessage) {
       //     self.pkg39.ignoreErrorMessage = setInterval(() => {
-      //       if (isErrored()) {
+      //       if (isErrorOccurred()) {
       //         hideError();
       //         if (isAutoQueueMode() && getQueueSize() < 1) {
       //           startQueue();
@@ -1054,6 +1065,8 @@ function initParentNode() {
       ;(() => {
         try {
           const MAIN = returnNodeObject(self);
+          const SEED = getRandomSeed();
+          const IS_INHERITED = prevConnectedLinks.length > 0;
 
           // reconnect load image node
           for (const { node, type } of prevConnectedLinks) {
@@ -1307,6 +1320,8 @@ function initCommandNode() {
   text += `\n// Only the first created command node will run.`;
   text += `\n\n// ## Global variables`;
   text += `\n// MAIN => Node: Load image node.`;
+  text += `\n// SEED => Number: Generated seed for current queue.`;
+  text += `\n// IS_INHERITED => Boolean: MAIN node has been inherited from previous Load image node.`;
   text += `\n// countQueues => Number: Number of queues.`;
   text += `\n// countLoops => Number: Number of loops.`;
   text += `\n// error: A callback function when an error occurred in command node.`;
@@ -1345,7 +1360,7 @@ function initCommandNode() {
   text += `\n\n// ## Node methods`;
   text += `\n// node.getValue("WIDGET_NAME") => Any`;
   text += `\n// node.setValue("WIDGET_NAME", "VALUE")`;
-  text += `\n// node.replace(Node): Change all connections with the other node.`;
+  text += `\n// node.replace(Node): Change all connections with the other same type node.`;
   text += `\n// node.getInput("INPUT_NAME") => Node`;
   text += `\n// node.connectInput("INPUT_NAME", Node): Connect to output of target node.`;
   text += `\n// node.getOutputs("OUTPUT_NAME") => NodeArray`;
@@ -1354,6 +1369,7 @@ function initCommandNode() {
   text += `\n// node.remove()`;
   text += `\n// node.enable()`;
   text += `\n// node.disable()`;
+  text += `\n// node.serialize() => Object`;
   text += `\n// node.hires(w, h) => [UpscalerNode, SamplerNode]: This method must be executed from ksampler node.`;
   text += `\n// node.hires(scale) => [UpscalerNode, SamplerNode]`;
   w.value = text;
@@ -1400,6 +1416,13 @@ function isVirtualNode(node) {
   return Array.isArray(node?.properties?.pkg39);
 }
 
+function getRandomSeed() {
+  let max = Math.min(1125899906842624, MAX_SEED);
+  let min = Math.max(-1125899906842624, MIN_SEED);
+  let range = (max - min) / (STEPS_OF_SEED / 10);
+  return Math.floor(Math.random() * range) * (STEPS_OF_SEED / 10) + min;
+}
+
 function getNodeByOriginalId(originalId) {
   return app.graph._nodes?.find(e => getOriginalId(e) === originalId);
 }
@@ -1418,6 +1441,9 @@ function getCommandValue() {
 
 async function promptQueuedHandler() {
   let isChanged = false;
+  let isAutoQueue = isAutoQueueMode();
+  let isErrored = isErrorOccurred();
+
   for (const node of app.graph._nodes) {
     if (node.comfyClass === CLASS_NAMES[0]) {
       const countImages = node.pkg39.loadedImages.length;
@@ -1430,11 +1456,13 @@ async function promptQueuedHandler() {
       await node.pkg39.setImage();
     }
   }
-  if (isAutoQueueMode() && isChanged && isErrored()) {
+
+  // ignore ComfyUI error messages
+  if (isAutoQueue && isErrored && isChanged) {
     hideError();
     setTimeout(() => {
       startQueue();
-    }, 256);
+    }, 1024);
   }
 }
 

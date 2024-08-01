@@ -50,10 +50,15 @@ Commnad has default guide lines.
 You should create command node after create nodes to use.  
 Copy and paste to command node and use it.  
 
-- Full code of img2img and Hi-Res fix
+- Full code of img2img with Hi-Res fix
 ```js
 disable("Preview Image");
 disable("Save Image");
+sound();
+if (countLoops > 2) {
+  stop();
+}
+
 var vaeEncode = create("VAEEncode");
 var vaeDecode = findOneLast("VAE decode");
 var save = create("SaveImage");
@@ -63,26 +68,27 @@ vaeEncode.connectInput("vae", loadCKPT);
 vaeEncode.connectOutput("LATENT", sampler);
 vaeEncode.connectInput("pixels", MAIN);
 save.connectInput("images", vaeDecode);
+
 var [newUpscaler, newSampler] = sampler.hires(1.5);
 newSampler.setValue("scheduler", "simple");
 newSampler.setValue("denoise", 0.5);
-newSampler.setValue("steps", 40);
+newSampler.setValue("steps", 30);
+sampler.setValue("seed", SEED); 
+newSampler.setValue("seed", SEED);
 ```
 
 - Set loaded image to LATENT
 ```js
-// if VAE encode node exists in image workflow
-var node = findOneById(1); // Load image
-node.connectOutput("IMAGE", findOne("VAE encode"))
+// If VAE encode node exists in image workflow
+MAIN.connectOutput("IMAGE", findOne("VAE encode"))
 ```
 
 ```js
 // No exists VAE encode in image workflow
-// create VAE encode in original workflow and connect IMAGE - pixels
-var load_image = findOneById(1); // Load image
-var vae_encode = findOneById(2); // VAE encode
-vae_encode.connectInput("VAE", findOne("Load Checkpoint"));
-vae_encode.connectOutput("LATENT", findOne("KSampler"));
+// Create VAE encode in original workflow and connect IMAGE - pixels
+var vaeEncode = findOneById(1); // VAE Encode
+vaeEncode.connectInput("VAE", findOne("Load Checkpoint"));
+vaeEncode.connectOutput("LATENT", findOne("KSampler"));
 ```
 
 - Disable all image nodes that has placed ending point
@@ -104,9 +110,9 @@ node.connectOutputs("CLIP", find("CLIPTextEncode"));
 node.connectOutputs("VAE", find("VAE Decode"));
 ```
 
-- Set error callback
+- Setting a callback when error occurred on the Commnad node
 ```js
-error = () => {
+error = (err) => {
   // code here...
 }
 ```

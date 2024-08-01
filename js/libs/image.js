@@ -56,24 +56,31 @@ function showError(err) {
   }
   if (msg) {
     app.ui.dialog.show(msg);
+    renderCanvas();
   }
 }
 
 function hideError() {
   app.ui.dialog.close();
+  app.lastNodeErrors = null;
 }
 
 function isErrored() {
-  if (app.ui?.dialog?.element) {
-    return app.ui.dialog.element.style.display !== "none" && 
-      app.ui.dialog.element.style.display !== "";
-  } else {
-    return false;
-  }
+  return app.lastNodeErrors && Object.keys(app.lastNodeErrors).length > 0;
+  // if (app.ui?.dialog?.element) {
+  //   return app.ui.dialog.element.style.display !== "none" && 
+  //     app.ui.dialog.element.style.display !== "";
+  // } else {
+  //   return false;
+  // }
 }
 
 function isAutoQueueMode() {
   return document.querySelector("input[name='AutoQueueMode']:checked")?.value === "instant";
+}
+
+function getQueueSize() {
+  return app.ui.lastQueueSize ?? 0;
 }
 
 function startQueue() {
@@ -99,10 +106,6 @@ function unsetAutoQueue() {
       }
     }
   }
-}
-
-function getQueueSize() {
-  return app.ui.lastQueueSize ?? 0;
 }
 
 function initParentNode() {
@@ -471,7 +474,7 @@ function initParentNode() {
       workflow = convertWorkflow(workflow, prevConnectedTargets);
       let samplerNodes = getSamplerNodes({ workflow, prompt });
       let nodeMaps = samplerNodes.map(e => getNodeMap({ workflow, prompt, sampler: e }));
-      nodeMaps.sort((a, b) => b.length - a.length); // put the long map in front of array
+      nodeMaps.sort((a, b) => b.length - a.length); // put the map in long order
       let graph = new LGraph(workflow);
       let canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
 
@@ -487,7 +490,7 @@ function initParentNode() {
         }
 
         // disable pin
-        // lock added Symbol()?
+        // lock => Symbol()?
         if (n.flags) {
           n.flags.pinned = false;
         }
@@ -546,10 +549,13 @@ function initParentNode() {
           return;
         }
 
+        let totalInputs = 0;
+        let totalOutputs = 0; 
         let connectedInputs = 0;
         let connectedOutputs = 0;
         if (node && node.inputs) {
           for (const input of node.inputs) {
+            totalInputs++;
             if (input.link) {
               connectedInputs++;
             }
@@ -558,6 +564,7 @@ function initParentNode() {
 
         if (node && node.outputs) {
           for (const output of node.outputs) {
+            totalOutputs++;
             if (output.links && output.links.length > 0) {
               connectedOutputs++;
             }
@@ -567,7 +574,11 @@ function initParentNode() {
         return {
           isPkg39: true,
           isEnd: connectedOutputs < 1, 
-          isStart: connectedInputs < 1, 
+          isStart: connectedInputs < 1,
+          hasInput: totalInputs > 0,
+          hasOutput: totalOutputs > 0,
+          hasConnectedInput: connectedInputs > 0,
+          hasConnectedOutput: connectedOutputs > 0,
           node: node,
           getValue: function(name) {
             if (!name) {
@@ -841,7 +852,7 @@ function initParentNode() {
       }
 
       // type or title
-      const findNodesByName = function(str, dir = 1) {
+      const findNodesByName = function(str, reverse) {
         let nodes = [];
         let nodeIds = [];
 
@@ -862,7 +873,7 @@ function initParentNode() {
         }
 
         // image.workflow
-        if (dir > 0) {
+        if (!reverse) {
           for (let i = 0; i < nodeMap.length; i++) {
             const n = nodeMap[i];
             saveNode(n);
@@ -888,10 +899,10 @@ function initParentNode() {
       }
 
       const findNodesByNameFromLast = function(str) {
-        return findNodesByName(str, -1);
+        return findNodesByName(str, true);
       }
 
-      const findNodeByName = function(str, dir = 1) {
+      const findNodeByName = function(str, reverse) {
         
         function isValid(e) {
           return (e.title && e.title === str) ||
@@ -901,13 +912,16 @@ function initParentNode() {
 
         // image.workflow
         let node;
-        if (dir > 0) {
+        if (!reverse) {
           for (let i = 0; i < nodeMap.length; i++) {
             for (const n of nodeMap[i]) {
               if (isValid(n)) {
                 node = n;
                 break;
               }
+            }
+            if (node) {
+              break;
             }
           }
         } else {
@@ -918,6 +932,9 @@ function initParentNode() {
                 break;
               }
             }
+            if (node) {
+              break;
+            }
           }
         }
 
@@ -925,7 +942,7 @@ function initParentNode() {
       }
 
       const findNodeByNameFromLast = function(str) {
-        return findNodeByName(str, -1);
+        return findNodeByName(str, true);
       }
 
       const findNodeById = function(id) {
@@ -968,34 +985,36 @@ function initParentNode() {
         }
       }
 
-      const ignoreErrorMessage = function() {
-        if (!self.pkg39.ignoreErrorMessage) {
-          self.pkg39.ignoreErrorMessage = setInterval(() => {
-            if (isErrored()) {
-              hideError();
-              startQueue();
-            }
-          }, 512);
-        }
+      // const ignoreErrorMessage = function() {
+      //   if (!self.pkg39.ignoreErrorMessage) {
+      //     self.pkg39.ignoreErrorMessage = setInterval(() => {
+      //       if (isErrored()) {
+      //         hideError();
+      //         if (isAutoQueueMode() && getQueueSize() < 1) {
+      //           startQueue();
+      //         }
+      //       }
+      //     }, 512);
+      //   }
 
-        let pageX = 0, pageY = 0;
-        const stopHandler = function(e) {
-          if (!pageX || !pageY) {
-            pageX = e.pageX;
-            pageY = e.pageY;
-          } else {
-            if (Math.abs(pageX - e.pageX) + Math.abs(pageY - e.pageY) > 100) {
-              document.removeEventListener("mousemove", stopHandler);
-              if (self.pkg39.ignoreErrorMessage) {
-                clearInterval(self.pkg39.ignoreErrorMessage);
-                self.pkg39.ignoreErrorMessage = null;
-              }
-            }
-          }
-        }
+      //   let pageX = 0, pageY = 0;
+      //   const stopHandler = function(e) {
+      //     if (!pageX || !pageY) {
+      //       pageX = e.pageX;
+      //       pageY = e.pageY;
+      //     } else {
+      //       if (Math.abs(pageX - e.pageX) + Math.abs(pageY - e.pageY) > 100) {
+      //         document.removeEventListener("mousemove", stopHandler);
+      //         if (self.pkg39.ignoreErrorMessage) {
+      //           clearInterval(self.pkg39.ignoreErrorMessage);
+      //           self.pkg39.ignoreErrorMessage = null;
+      //         }
+      //       }
+      //     }
+      //   }
         
-        document.addEventListener("mousemove", stopHandler);      
-      }
+      //   document.addEventListener("mousemove", stopHandler);      
+      // }
 
       const createNode = function(name, options) {
         options = { select: true, shiftY: 0, before: false, ...(options || {}) };
@@ -1021,8 +1040,7 @@ function initParentNode() {
 
       const nextQueue = function() {
         self.pkg39.updateIndex();
-        self.pkg39.setImage()
-          .then(() => { renderCanvas() });
+        self.pkg39.setImage();
       }
 
       const prevConnectedLinks = prevConnectedTargets.map(t => {
@@ -1042,13 +1060,9 @@ function initParentNode() {
             MAIN.connectOutput(type, node);
           }
 
-          const increaseErrors = () => { self.pkg39.countErrors += 1; }
-          const resetErrors = () => { self.pkg39.countErrors = 0; }
           const countQueues = self.pkg39.countQueues;
           const countLoops = self.pkg39.countLoops;
           const countErrors = self.pkg39.countErrors;
-          const isAutoQueue = isAutoQueueMode();
-          const queueSize = getQueueSize();
 
           const original = toOriginalCanvas;
           const virtual = toVirtualCanvas;
@@ -1064,7 +1078,7 @@ function initParentNode() {
           const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
           const removeAll = removeAllNodes;
           const create = createNode;
-          const ignore = ignoreErrorMessage;
+          // const ignore = ignoreErrorMessage;
           const sound = playSound;
           const start = () => { startQueue(); }
           const cancel = () => { cancelQueue(); }
@@ -1077,16 +1091,15 @@ function initParentNode() {
             try {
               ${__command__}
             } catch(err) {
-              setTimeout(() => {
-                error(err);
-              }, 512);
+              error(err);
             }`;
           eval(__command__.trim());
         } catch(err) {
           console.error(err);
-          unsetAutoQueue();
         }
       })();
+
+      renderCanvas();
     }).bind(this);
 
     this.pkg39.removeWorkflow = (function() {
@@ -1278,11 +1291,11 @@ function initCommandNode() {
   let nodeIndex = 1;
   const nodes = app.graph._nodes
     .filter(e => !!e && !isCommandNode(e) && !isVirtualNode(e))
-    .sort((a, b) => a.id - b.id)
+    .sort((a, b) => a.id - b.id);
 
   for (const node of nodes) {
     const nodeId = node.id;
-    const nodeType = node.type;
+    // const nodeType = node.type;
     const nodeTitle = node.title;
     text += `var n${nodeIndex++} = findOneById(${nodeId}); // ${nodeTitle}\n`;
   }
@@ -1313,7 +1326,7 @@ function initCommandNode() {
   text += `\n// enableAll(): Enable all nodes in virtual workflow.`;
   text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
-  text += `\n// ignore(): Ignore error message before move mouse.`;
+  // text += `\n// ignore(): Ignore error message before move mouse.`;
   text += `\n// sound(): Play the sound once.`;
   text += `\n// start(): Start queue.`;
   text += `\n// cancel(): Cancel current queue.`;
@@ -1324,6 +1337,10 @@ function initCommandNode() {
   text += `\n// node.isPkg39 => Boolean`;
   text += `\n// node.isEnd => Boolean: The node has been placed ending point.`;
   text += `\n// node.isStart => Boolean: The node has been placed starting point.`;
+  text += `\n// node.hasInput => Boolean`;
+  text += `\n// node.hasOutput => Boolean`;
+  text += `\n// node.hasConnectedInput => Boolean`;
+  text += `\n// node.hasConnectedOutput => Boolean`;
   text += `\n// node.node => ComfyNode`;
   text += `\n\n// ## Node methods`;
   text += `\n// node.getValue("WIDGET_NAME") => Any`;
@@ -1400,12 +1417,24 @@ function getCommandValue() {
 }
 
 async function promptQueuedHandler() {
+  let isChanged = false;
   for (const node of app.graph._nodes) {
     if (node.comfyClass === CLASS_NAMES[0]) {
+      const countImages = node.pkg39.loadedImages.length;
+      const prevIndex = node.pkg39.getIndex();
       node.pkg39.updateIndex();
-      node.pkg39.setImage()
-        .then(() => { renderCanvas() });
+      const currIndex = node.pkg39.getIndex();
+      if (prevIndex !== currIndex && countImages > 0) {
+        isChanged = true;
+      }
+      await node.pkg39.setImage();
     }
+  }
+  if (isAutoQueueMode() && isChanged && isErrored()) {
+    hideError();
+    setTimeout(() => {
+      startQueue();
+    }, 256);
   }
 }
 

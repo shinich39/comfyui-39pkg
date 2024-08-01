@@ -8,7 +8,7 @@ Using this package requires a little understanding of javascript syntax.
 - Select random node regardless of type.
 - Fast save from "Preview Image" node.
 - Load workflow from images in directory.
-- Loop images in directory.
+- Loop images in sequentially from directory.
 - Manipulate loaded workflow from image.
 - Repeat same process when generating image and add some details.
 - Start batch process with exactly the same process.
@@ -49,38 +49,94 @@ In auto queue mode, ignore ComfyUI errors. (Link error, ...)
 Commnad has default guide lines.  
 You should create command node after create nodes to use.  
 Copy and paste to command node and use it.  
+You can test your code by changing index.  
 
-- Full code of img2img with Hi-Res fix
+- Full code of Hi-Res fix
 ```js
-disable("Preview Image");
-disable("Save Image");
-sound();
-if (countLoops > 2) {
-  stop();
-}
+// Upscale settings
+var VAE_ENCODE_NODE_ID = 2;
+var SAVE_NODE_ID = 3;
+var CKPT_NAME = null;
+var SCALE_BY = 1.5;
+var DENOISE = 0.5;
+var STEPS = 30;
+var CFG = 6;
+var SAMPLER_NAME = "euler";
+var SCHEDULER = "simple";
 
-var vaeEncode = create("VAEEncode");
-var vaeDecode = findOneLast("VAE decode");
-var save = create("SaveImage");
+// Create "VAE Encode" node and connect input IMAGE of "Load image" node
+// Create "Save Image" node and you can set options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
+var vaeDecode = findOneLast("VAE Decode");
 var sampler = findOne("KSampler");
-var loadCKPT = findOne("Load Checkpoint");
-vaeEncode.connectInput("vae", loadCKPT);
+var ckpt = findOne("Load Checkpoint");
+vaeEncode.connectInput("vae", ckpt);
+save.connectInput("images", vaeDecode);
+if (CKPT_NAME) { ckpt.setValue("ckpt_name", CKPT_NAME)  }
+
+// new sampler inherit sampler values and links
+var [newUpscaler, newSampler] = sampler.hires(SCALE_BY);
+newSampler.setValue("sampler_name", SAMPLER_NAME);
+newSampler.setValue("scheduler", SCHEDULER);
+newSampler.setValue("denoise", DENOISE);
+newSampler.setValue("cfg", CFG);
+newSampler.setValue("steps", STEPS);
+
+vaeEncode.connectOutput("LATENT", newUpscaler);
+
+sampler.remove();
+remove("Empty Latent Image");
+remove("Preview Image");
+remove("Save Image");
+
+sound();
+```
+
+- Full code of inpaint
+```js
+// Inpaint settings
+var VAE_ENCODE_NODE_ID = 601;
+var SAVE_NODE_ID = 1297;
+var DENOISE = 1;
+var STEPS = 30;
+var CFG = 6;
+
+// Create "VAE Encdoe (for Inpainting)" node and connect input IMAGE and MASK of "Load image" node
+// Create "Save Image" node and you can set options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
+var vaeDecode = findOneLast("VAE Decode");
+var sampler = findOneLast("KSampler");
+var ckpt = findOne("Load Checkpoint");
+vaeEncode.connectInput("vae", ckpt);
 vaeEncode.connectOutput("LATENT", sampler);
-vaeEncode.connectInput("pixels", MAIN);
 save.connectInput("images", vaeDecode);
 
-var [newUpscaler, newSampler] = sampler.hires(1.5);
-newSampler.setValue("scheduler", "simple");
-newSampler.setValue("denoise", 0.5);
-newSampler.setValue("steps", 30);
-sampler.setValue("seed", SEED); 
-newSampler.setValue("seed", SEED);
+sampler.setValue("denoise", DENOISE);
+sampler.setValue("cfg", CFG);
+sampler.setValue("steps", STEPS);
+
+remove("Empty Latent Image");
+remove("Preview Image");
+remove("Save Image");
+remove("Image Save");
+
+find("Upscale Latent").forEach(e => {
+  if (!e.hasConnectedOutput) { e.remove() };
+});
+
+find("KSampler").forEach(e => {
+  if (!e.hasConnectedOutput) { e.remove() };
+});
+
+sound();
 ```
 
 - Set loaded image to LATENT
 ```js
 // If VAE encode node exists in image workflow
-MAIN.connectOutput("IMAGE", findOne("VAE encode"))
+MAIN.connectOutput("IMAGE", findOne("VAE Encode"))
 ```
 
 ```js
@@ -91,36 +147,53 @@ vaeEncode.connectInput("VAE", findOne("Load Checkpoint"));
 vaeEncode.connectOutput("LATENT", findOne("KSampler"));
 ```
 
-- Disable all image nodes that has placed ending point
+- Remove all "Preview Image" nodes
+```js
+// case 1
+remove("Preview Image");
+
+// case 2
+find("Preview Image").forEach(e => {
+  if (e.isEnd) { e.remove() }
+});
+```
+
+- Disable all "Preview Image" nodes
 ```js
 // case 1
 disable("Preview Image");
 
 // case 2
-find("Save Image").forEach(e => {
+find("Preview Image").forEach(e => {
   if (e.isEnd) { e.disable() }
+});
+```
+
+- Remove all "Ksampler" nodes that does not connected output.
+```js
+find("KSampler").forEach(e => {
+  if (!e.hasConnectedOutput) { e.remove() };
 });
 ```
 
 - Set specific checkpoint 
 ```js
 // case 1
-var node = findOneById(1); // Load Checkpoint
-node.connectOutput("MODEL", findOneLast("KSampler"));
-node.connectOutput("CLIP", find("CLIPTextEncode"));
-node.connectOutput("VAE", find("VAE Decode"));
+var ckpt = findOneById(1); // Load Checkpoint
+ckpt.connectOutput("MODEL", findOneLast("KSampler"));
+ckpt.connectOutput("CLIP", find("CLIPTextEncode"));
+ckpt.connectOutput("VAE", find("VAE Decode"));
 
 // case 2
-var ckpt_name = node.getValue("ckpt_name");
-var nodes = find("Load Checkpoint");
-nodes.forEach(n => n.setValue("ckpt_name", ckpt_name));
-```
+var ckpt = findOneById(1); // Load Checkpoint
+var ckpt_name = ckpt.getValue("ckpt_name");
+find("Load Checkpoint").forEach(e => e.setValue("ckpt_name", ckpt_name));
 
-- Setting a callback when error occurred on the Commnad node
-```js
-error = (err) => {
-  // code here...
-}
+// case 3
+var ckpt1 = findOneById(1); // Load Checkpoint
+var ckpt2 = findOne("Load Checkpoint");
+ckpt1.replace(ckpt2);
+ckpt2.remove();
 ```
 
 - Stop after run 5 (In auto queue mode)  
@@ -141,6 +214,13 @@ if (countQueues > 5) { sound(); }
 - Load next image
 ```js
 next();
+```
+
+- Setting a callback when error occurred on the "Commnad" node
+```js
+error = (err) => {
+  // code here...
+}
 ```
 
 ## Update

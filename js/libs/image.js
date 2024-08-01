@@ -382,6 +382,8 @@ function initParentNode() {
       } catch(err) {
         console.error(err);
       }
+
+      renderCanvas();
     }).bind(this);
 
     this.pkg39.loadWorkflow = (function({ workflow, prompt, width, height }) {
@@ -803,9 +805,11 @@ function initParentNode() {
             }
 
             const upscaler = createNode("LatentUpscale");
-            upscaler.node.pos = [node.pos[0], node.pos[1] + node.size[1] + DEFAULT_MARGIN_Y];
+            upscaler.putOnBottom(node);
+            upscaler.moveToBottom();
             const sampler = createNode("KSampler");
-            sampler.node.pos = [upscaler.node.pos[0], upscaler.node.pos[1] + upscaler.node.size[1] + DEFAULT_MARGIN_Y];
+            sampler.putOnBottom(node);
+            sampler.moveToBottom();
 
             this.connectOutput("LATENT", upscaler);
 
@@ -843,6 +847,74 @@ function initParentNode() {
             try {
               return node.serialize();
             } catch(err) {
+            }
+          },
+          putOnRight: function(targetNode) {
+            if (!targetNode) {
+              return false;
+            }
+            if (targetNode.isPkg39) {
+              targetNode = targetNode.node;
+            }
+            node.pos[0] = targetNode.pos[0] + targetNode.size[0] + DEFAULT_MARGIN_X;
+            node.pos[1] = targetNode.pos[1];
+          },
+          putOnBottom: function(targetNode) {
+            if (!targetNode) {
+              return false;
+            }
+            if (targetNode.isPkg39) {
+              targetNode = targetNode.node;
+            }
+            node.pos[0] = targetNode.pos[0];
+            node.pos[1] = targetNode.pos[1] + targetNode.size[1] + DEFAULT_MARGIN_Y;
+          },
+          moveToRight: function() {
+            let isChanged = true;
+            while(isChanged) {
+              isChanged = false;
+              for (const n of app.graph._nodes) {
+                if (node.id === n.id) {
+                  continue;
+                }
+                const top = n.pos[1];
+                const bottom = n.pos[1] + n.size[1];
+                const left = n.pos[0];
+                const right = n.pos[0] + n.size[0];
+                const isCollisionX = left <= node.pos[0] + node.size[0] && 
+                  right >= node.pos[0];
+                const isCollisionY = top <= node.pos[1] + node.size[1] && 
+                  bottom >= node.pos[1];
+
+                if (isCollisionX && isCollisionY) {
+                  node.pos[0] = right + DEFAULT_MARGIN_X;
+                  isChanged = true;
+                }
+              }
+            }
+          },
+          moveToBottom: function() {
+            let isChanged = true;
+            while(isChanged) {
+              isChanged = false;
+              for (const n of app.graph._nodes) {
+                if (node.id === n.id) {
+                  continue;
+                }
+                const top = n.pos[1];
+                const bottom = n.pos[1] + n.size[1];
+                const left = n.pos[0];
+                const right = n.pos[0] + n.size[0];
+                const isCollisionX = left <= node.pos[0] + node.size[0] && 
+                  right >= node.pos[0];
+                const isCollisionY = top <= node.pos[1] + node.size[1] && 
+                  bottom >= node.pos[1];
+
+                if (isCollisionX && isCollisionY) {
+                  node.pos[1] = bottom + DEFAULT_MARGIN_Y;
+                  isChanged = true;
+                }
+              }
             }
           },
         }
@@ -982,57 +1054,31 @@ function initParentNode() {
         }
       }
 
-      // const ignoreErrorMessage = function() {
-      //   if (!self.pkg39.ignoreErrorMessage) {
-      //     self.pkg39.ignoreErrorMessage = setInterval(() => {
-      //       if (isErrorOccurred()) {
-      //         hideError();
-      //         if (isAutoQueueMode() && getQueueSize() < 1) {
-      //           startQueue();
-      //         }
-      //       }
-      //     }, 512);
-      //   }
-
-      //   let pageX = 0, pageY = 0;
-      //   const stopHandler = function(e) {
-      //     if (!pageX || !pageY) {
-      //       pageX = e.pageX;
-      //       pageY = e.pageY;
-      //     } else {
-      //       if (Math.abs(pageX - e.pageX) + Math.abs(pageY - e.pageY) > 100) {
-      //         document.removeEventListener("mousemove", stopHandler);
-      //         if (self.pkg39.ignoreErrorMessage) {
-      //           clearInterval(self.pkg39.ignoreErrorMessage);
-      //           self.pkg39.ignoreErrorMessage = null;
-      //         }
-      //       }
-      //     }
-      //   }
-        
-      //   document.addEventListener("mousemove", stopHandler);      
-      // }
-
       const createNode = function(name, options) {
         options = { select: true, shiftY: 0, before: false, ...(options || {}) };
         const node = LiteGraph.createNode(name);
         if (!node) {
           throw new Error(`${name} node can not create.`);
         }
+
         node.properties.pkg39 = [self.id, -1];
+
         if (DEFAULT_NODE_COLORS) {
           node.color = DEFAULT_NODE_COLORS.yellow.color;
           node.bgcolor = DEFAULT_NODE_COLORS.yellow.bgcolor;
           node.groupcolor = DEFAULT_NODE_COLORS.yellow.groupcolor;
         }
-        app.graph.add(node);
 
+        app.graph.add(node);
 
         if (options.select) {
           app.canvas.selectNode(node, false);
         }
 
-        return returnNodeObject(node);
+        const _node = returnNodeObject(node);
+        _node.putOnRight(self);
+        _node.moveToBottom();
+        return _node;
       }
 
       const nextQueue = function() {
@@ -1053,15 +1099,15 @@ function initParentNode() {
           const MAIN = returnNodeObject(self);
           const SEED = getRandomSeed();
           const IS_INHERITED = prevConnectedLinks.length > 0;
+          const countImages = self.pkg39.loadedImages.length;
+          const countQueues = self.pkg39.countQueues;
+          const countLoops = self.pkg39.countLoops;
+          const countErrors = self.pkg39.countErrors;
 
           // reconnect load image node
           for (const { node, type } of prevConnectedLinks) {
             MAIN.connectOutput(type, node);
           }
-
-          const countQueues = self.pkg39.countQueues;
-          const countLoops = self.pkg39.countLoops;
-          const countErrors = self.pkg39.countErrors;
 
           const original = toOriginalCanvas;
           const virtual = toVirtualCanvas;
@@ -1077,12 +1123,11 @@ function initParentNode() {
           const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
           const removeAll = removeAllNodes;
           const create = createNode;
-          // const ignore = ignoreErrorMessage;
           const sound = playSound;
           const start = () => { startQueue(); }
-          const cancel = () => { cancelQueue(); }
-          const loop = () => { setAutoQueue(); }
           const stop = () => { unsetAutoQueue(); cancelQueue(); }
+          const skip = () => { cancelQueue(); }
+          const loop = () => { setAutoQueue(); startQueue(); }
           const next = () => { nextQueue(); }
           let error = (err) => { console.error(err); };
           let __command__ = getCommandValue();
@@ -1261,8 +1306,7 @@ try {
       if (this.prevValue !== currValue) {
         this.prevValue = currValue;
         idxWidget.value = 0;
-        self.pkg39.updateDirPath()
-          .then(() => renderCanvas())
+        self.pkg39.updateDirPath();
       }
     }
 
@@ -1273,8 +1317,6 @@ try {
 
     // initialize after create
     this.pkg39.updateDirPath();
-
-    renderCanvas();
   } catch(err) {
     console.error(err);
   }
@@ -1308,6 +1350,7 @@ function initCommandNode() {
   text += `\n// MAIN => Node: Load image node.`;
   text += `\n// SEED => Number: Generated seed for current queue.`;
   text += `\n// IS_INHERITED => Boolean: MAIN node has been inherited from previous Load image node.`;
+  text += `\n// countImages => Number: Number of images.`;
   text += `\n// countQueues => Number: Number of queues.`;
   text += `\n// countLoops => Number: Number of loops.`;
   text += `\n// error: A callback function when an error occurred in command node.`;
@@ -1327,13 +1370,12 @@ function initCommandNode() {
   text += `\n// enableAll(): Enable all nodes in virtual workflow.`;
   text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
-  // text += `\n// ignore(): Ignore error message before move mouse.`;
   text += `\n// sound(): Play the sound once.`;
   text += `\n// start(): Start queue.`;
-  text += `\n// cancel(): Cancel current queue.`;
-  text += `\n// loop(): Enable auto queue mode.`;
-  text += `\n// stop(): Disable auto queue mode.`;
+  text += `\n// stop(): Disable auto queue mode and stop current queue.`;
+  text += `\n// loop(): Enable auto queue mode and start queue.`;
   text += `\n// next(): Load next image.`;
+  text += `\n// skip(): skip current queue.`;
   text += `\n\n// ## Node variables`;
   text += `\n// node.isPkg39 => Boolean`;
   text += `\n// node.isEnd => Boolean: The node has been placed ending point.`;
@@ -1355,9 +1397,20 @@ function initCommandNode() {
   text += `\n// node.enable()`;
   text += `\n// node.disable()`;
   text += `\n// node.serialize() => Object`;
+  text += `\n// node.putOnRight(Node)`;
+  text += `\n// node.putOnBottom(Node)`;
+  text += `\n// node.moveToRight()`;
+  text += `\n// node.moveToBottom()`;
   text += `\n// node.hires(w, h) => [UpscalerNode, SamplerNode]: This method must be executed from ksampler node.`;
   text += `\n// node.hires(scale) => [UpscalerNode, SamplerNode]`;
   w.value = text;
+
+  // fix widget size
+  setTimeout(() => {
+    this.setSize(this.size);
+    this.setDirtyCanvas(true, true);
+    // renderCanvas();
+  }, 1);
 }
 
 function isSoundPlayed() {

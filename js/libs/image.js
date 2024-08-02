@@ -16,6 +16,12 @@ const MIN_SEED = 0;
 const MAX_SEED = parseInt("0xffffffffffffffff", 16);
 const STEPS_OF_SEED = 10;
 
+const DEFAULT_SAMPLER_NODE_NAME = "KSampler";
+const DEFAULT_SAVE_NODE_NAME = "SaveImage";
+const DEFAULT_ENCODE_NODE_NAME = "VAEEncode";
+const DEFAULT_DECODE_NODE_NAME = "VAEDecode";
+const DEFAULT_UPSCALER_NODE_NAME = "LatentUpscale";
+
 
 // add notification element
 const AUDIO_ELEMENT = document.createElement("audio");
@@ -352,7 +358,7 @@ function initParentNode() {
         throw new Error(`No image in ${this.pkg39.DIR_PATH.value}`);
       }
 
-      const { imagePath, maskPath, imageName } = this.pkg39.selectedImage;
+      const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
 
       this.pkg39.MASK.originalPath = imagePath;
       this.pkg39.MASK.maskPath = maskPath;
@@ -367,18 +373,8 @@ function initParentNode() {
 
       // render image workflow
       try {
-        const m = await this.pkg39.getMetadata();
-        try {
-          this.pkg39.removeWorkflow();
-        } catch(err) {
-          console.error(err);
-        }
-
-        try {
-          this.pkg39.loadWorkflow(m);
-        } catch(err) {
-          console.error(err);
-        }
+        this.pkg39.removeWorkflow();
+        this.pkg39.loadWorkflow(this.pkg39.selectedImage);
       } catch(err) {
         console.error(err);
       }
@@ -386,8 +382,8 @@ function initParentNode() {
       renderCanvas();
     }).bind(this);
 
-    this.pkg39.loadWorkflow = (function({ workflow, prompt, width, height }) {
-      if (!workflow) {
+    this.pkg39.loadWorkflow = (function(selectedImage) {
+      if (!selectedImage || !selectedImage.workflow) {
         return;
       }
 
@@ -412,7 +408,9 @@ function initParentNode() {
 
       // remove "Load image node" in virtual canvas
       // remove "Command node" in virtual canvas
-      function convertWorkflow(w, prevConnectedTargets) {
+      function convertWorkflow(w) {
+        w = JSON.parse(JSON.stringify(w));
+        let prevConnectedTargets = [];
         let nodeIds = [];
         for (let i = w.nodes.length - 1; i >= 0; i--) {
           const n = w.nodes[i];
@@ -473,23 +471,30 @@ function initParentNode() {
           // }
         }
 
-        return w;
+        return [w, prevConnectedTargets];
       }
 
       const self = this;
-      let prevConnectedTargets = [];
-      workflow = convertWorkflow(workflow, prevConnectedTargets);
+      let width = selectedImage.width;
+      let height = selectedImage.height
+      let prompt = selectedImage.prompt;
+      let [workflow, prevConnectedTargets] = convertWorkflow(selectedImage.workflow);
       let samplerNodes = getSamplerNodes({ workflow, prompt });
-      let nodeMaps = samplerNodes.map(e => getNodeMap({ workflow, prompt, sampler: e }));
+      let nodeMaps = samplerNodes.map(sampler => getNodeMap({ workflow, sampler }));
       nodeMaps.sort((a, b) => b.length - a.length); // put the map in long order
+
+      // create virtual canvas
       let graph = new LGraph(workflow);
       let canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
 
       // set properties
-      // disable specific nodes
       for (const n of graph._nodes) {
-        // parentId, originalId,
-        n.properties.pkg39 = [this.id, n.id];
+        n.properties.pkg39 = {
+          parentId: this.id,
+          originalId: n.id,
+          isEnabled: n.mode === 0,
+          isDisabled: n.mode === 4,
+        }
         if (DEFAULT_NODE_COLORS) {
           n.color = DEFAULT_NODE_COLORS.yellow.color;
           n.bgcolor = DEFAULT_NODE_COLORS.yellow.bgcolor;
@@ -509,46 +514,58 @@ function initParentNode() {
       canvas.copyToClipboard();
 
       // set mouse point for paste point
-      ;(() => {
-        // const oldPoint = JSON.parse(JSON.stringify(app.canvas?.graph_mouse || [0, 0]));
+      // const oldPoint = JSON.parse(JSON.stringify(app.canvas?.graph_mouse || [0, 0]));
 
-        // set position X
-        try {
-          app.canvas.graph_mouse[0] = this.pos[0] + this.size[0] + DEFAULT_MARGIN_X;
-        } catch(err) {
-          console.error(err);
-        }
-
-        // set position Y
-        try {
-          app.canvas.graph_mouse[1] = this.pos[1];
-        } catch(err) {
-          console.error(err);
-        }
-
-        // paste to original canvas
-        app.canvas.pasteFromClipboard();
-        app.canvas.deselectAllNodes();
-      })();
-
-      // convert to original nodeMap from image nodeMap
-      nodeMaps = convertNodeMaps(nodeMaps);
-
-      // set default nodeMap
-      let isVirtualMode = true;
-      let nodeMapIndex = 0;
-      let nodeMap = nodeMaps[0]; // [[[node, node]]]
-
-      const toVirtualCanvas = function(n) {
-        isVirtualMode = true;
-        nodeMapIndex = Math.floor(Math.min(0, Math.max(n ?? 0, nodeMaps.length - 1)));
-        nodeMap = nodeMaps[nodeMapIndex];
+      // set position X
+      try {
+        app.canvas.graph_mouse[0] = this.pos[0] + this.size[0] + DEFAULT_MARGIN_X;
+      } catch(err) {
+        console.error(err);
       }
 
-      const toOriginalCanvas = function() {
-        isVirtualMode = false;
-        nodeMapIndex = 0;
-        nodeMap = [app.graph._nodes.filter(e => !isVirtualNode(e))];
+      // set position Y
+      try {
+        app.canvas.graph_mouse[1] = this.pos[1];
+      } catch(err) {
+        console.error(err);
+      }
+
+      // paste to original canvas
+      app.canvas.pasteFromClipboard();
+      app.canvas.deselectAllNodes();
+
+      // convert to original nodeMap from image nodeMap
+      // nodeMaps[ nodeMap[ nodeList[ node{}, node{} ] ] ]
+      nodeMaps = convertNodeMaps(nodeMaps);
+      let nodeMapIndex;
+      let nodeMap; 
+
+      const changeNodeMap = function(n) {
+        nodeMapIndex = Math.floor(Math.min(0, Math.max(n ?? 0, nodeMaps.length - 1)));
+        nodeMap = nodeMaps[nodeMapIndex];
+
+        // enable nodes in flow
+        for (const oNode of app.graph._nodes) {
+          if (!isVirtualNode(oNode)) {
+            continue;
+          }
+          let isEnabled = false;
+          if (oNode.properties.pkg39.isEnabled) {
+            for (const nodeList of nodeMap) {
+              for (const vNode of nodeList) {
+                if (oNode.id === vNode.id) {
+                  isEnabled = true;
+                  break;
+                }
+              }
+              if (isEnabled) {
+                break;
+              }
+            }
+          }
+          // bypass node that out of flow
+          oNode.mode = isEnabled ? 0 : 4; 
+        }
       }
 
       const returnNodeObject = function(node) {
@@ -586,13 +603,16 @@ function initParentNode() {
           hasOutput: totalOutputs > 0,
           hasConnectedInput: connectedInputs > 0,
           hasConnectedOutput: connectedOutputs > 0,
+          id: node.id,
+          title: node.title,
           node: node,
+          type: node.comfyClass || node.type,
           getValue: function(name) {
             if (!name) {
               return;
             }
             const widget = node.widgets?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            return widget ? widget.value : null;
+            return widget?.value ?? null;
           },
           setValue: function(name, value) {
             if (!name) {
@@ -609,11 +629,7 @@ function initParentNode() {
               return false;
             }
             if (targetNode.isPkg39) {
-              if (targetNode.node) {
-                targetNode = targetNode.node;
-              } else {
-                return false;
-              }
+              targetNode = targetNode.node;
             }
             if (node.type !== targetNode.type) {
               return false;
@@ -764,90 +780,14 @@ function initParentNode() {
             }
             return true;
           },
-          hires: function(w, h) {
-            if (!w) {
-              return false;
-            }
-            // "KSamplerAdvanced"
-            if (["KSampler"].indexOf(node.comfyClass || node.type) === -1) {
-              return false;
-            }
-
-            if (!h) {
-              h = Math.floor(height * w);
-              w = Math.floor(width * w);
-            }
-
-            const outputNodes = this.getOutput("LATENT");
-            const inputNodes = [];
-            const widgetValues = [];
-            if (node.inputs) {
-              for (const input of node.inputs) {
-                const link = app.graph.links?.find(e => e && e.id === input.link);
-                if (link && link.type) {
-                  const n = app.graph._nodes.find(e => e.id === link.origin_id);
-                  inputNodes.push({
-                    name: input.name || input.type,
-                    node: returnNodeObject(n),
-                    _node: n,
-                  });
-                }
-              }
-            }
-
-            if (node.widgets) {
-              for (const widget of node.widgets) {
-                widgetValues.push({
-                  name: widget.name,
-                  value: widget.value,
-                });
-              }
-            }
-
-            const upscaler = createNode("LatentUpscale");
-            upscaler.putOnBottom(node);
-            upscaler.moveToBottom();
-            const sampler = createNode("KSampler");
-            sampler.putOnBottom(node);
-            sampler.moveToBottom();
-
-            this.connectOutput("LATENT", upscaler);
-
-            for (const e of inputNodes) {
-              sampler.connectInput(e.name, e.node);
-            }
-
-            for (const outputNode of outputNodes) {
-              sampler.connectOutput("LATENT", outputNode);
-            }
-
-            for (const {name, value} of widgetValues) {
-              sampler.setValue(name, value);
-            }
-
-            upscaler.connectOutput("LATENT", sampler);
-            upscaler.setValue("width", w);
-            upscaler.setValue("height", h);
-
-            return [upscaler, sampler];
-          },
           remove: function() {
             app.graph.remove(node);
           },
           disable: function() {
-            this.bypass(true);
+            node.mode = 4;
           },
           enable: function() {
-            this.bypass(false);
-          },
-          bypass: function(b = true) {
-            node.mode = b ? 4 : 0;
-          },
-          serialize: function() {
-            try {
-              return node.serialize();
-            } catch(err) {
-            }
+            node.mode = 0;
           },
           putOnRight: function(targetNode) {
             if (!targetNode) {
@@ -917,6 +857,18 @@ function initParentNode() {
               }
             }
           },
+          hires: function(w, h) {
+            return createHiresNodes.apply(this, [w, h]);
+          },
+          encode: function() {
+            return createEncodeNode.apply(this);
+          },
+          decode: function() {
+            return createDecodeNode.apply(this);
+          },
+          save: function() {
+            return createSaveNode.apply(this);
+          },
         }
       }
 
@@ -960,9 +912,7 @@ function initParentNode() {
           .filter(e => !!e);
 
         // sort original nodes in ascending order
-        if (!isVirtualMode) {
-          nodes.sort((a, b) => a.node.id - b.node.id);
-        }
+        nodes.sort((a, b) => a.node.id - b.node.id);
 
         return nodes;
       }
@@ -1061,7 +1011,12 @@ function initParentNode() {
           throw new Error(`${name} node can not create.`);
         }
 
-        node.properties.pkg39 = [self.id, -1];
+        node.properties.pkg39 = {
+          parentId: self.id,
+          originalId: -1,
+          isEnabled: true,
+          isDisabled: false,
+        }
 
         if (DEFAULT_NODE_COLORS) {
           node.color = DEFAULT_NODE_COLORS.yellow.color;
@@ -1079,6 +1034,134 @@ function initParentNode() {
         _node.putOnRight(self);
         _node.moveToBottom();
         return _node;
+      }
+
+      const createHiresNodes = function(w, h) {
+        if (!w) {
+          return false;
+        }
+        if (!this.hasOutput) {
+          return false;
+        }
+        if (!this.node.outputs.find(e => e.type === "LATENT")) {
+          return false;
+        }
+        if (!h) {
+          h = Math.floor(height * w);
+          w = Math.floor(width * w);
+        }
+
+        const isSampler = ["KSampler", "KSamplerAdvanced"].indexOf(this.type) > -1; 
+        const node = this.node;
+        const outputNodes = this.getOutput("LATENT");
+        const inputNodes = [];
+        if (node.inputs) {
+          for (const input of node.inputs) {
+            const link = app.graph.links?.find(e => e && e.id === input.link);
+            if (link && link.type) {
+              const n = app.graph._nodes.find(e => e.id === link.origin_id);
+              inputNodes.push({
+                name: input.name || input.type,
+                type: input.type,
+                node: returnNodeObject(n),
+              });
+            }
+          }
+        }
+
+        const widgetValues = [];
+        if (node.widgets) {
+          for (const widget of node.widgets) {
+            widgetValues.push({
+              name: widget.name,
+              value: widget.value,
+            });
+          }
+        }
+
+        const upscaler = createNode(DEFAULT_UPSCALER_NODE_NAME);
+        upscaler.putOnRight(this);
+        upscaler.moveToBottom();
+        
+        const sampler = createNode(isSampler ? this.type : DEFAULT_SAMPLER_NODE_NAME);
+        sampler.putOnRight(this);
+        sampler.moveToBottom();
+
+        this.connectOutput("LATENT", upscaler);
+
+        // connect sampler inputs
+        for (const e of inputNodes) {
+          if (e.type !== "LATENT") {
+            sampler.connectInput(e.name, e.node);
+          }
+        }
+
+        // connect sampler outputs
+        sampler.connectOutput("LATENT", outputNodes);
+
+        // inherit values from this node
+        if (isSampler) {
+          for (const {name, value} of widgetValues) {
+            sampler.setValue(name, value);
+          }
+        }
+        
+        upscaler.connectOutput("LATENT", sampler);
+        upscaler.setValue("width", w);
+        upscaler.setValue("height", h);
+
+        return [upscaler, sampler];
+      }
+
+      const createEncodeNode = function() {
+        if (!this.hasOutput) {
+          return false;
+        }
+        if (!this.node.outputs.find(e => e.type === "IMAGE")) {
+          return false;
+        }
+
+        const node = createNode(DEFAULT_ENCODE_NODE_NAME);
+        node.putOnRight(this);
+        node.moveToBottom();
+
+        this.connectOutput("IMAGE", node);
+
+        return node;
+      }
+
+      const createDecodeNode = function() {
+        if (!this.hasOutput) {
+          return false;
+        }
+        if (!this.node.outputs.find(e => e.type === "LATENT")) {
+          return false;
+        }
+
+        const node = createNode(DEFAULT_DECODE_NODE_NAME);
+        node.putOnRight(this);
+        node.moveToBottom();
+
+        this.connectOutput("LATENT", node);
+
+        return node;
+      }
+
+      const createSaveNode = function() {
+        if (!this.hasOutput) {
+          return false;
+        }
+        if (!this.node.outputs.find(e => e.type === "IMAGE")) {
+          return false;
+        }
+
+        const node = createNode(DEFAULT_SAVE_NODE_NAME);
+        node.putOnRight(this);
+        node.moveToBottom();
+
+        this.connectOutput("IMAGE", node);
+
+        return node;
       }
 
       const nextQueue = function() {
@@ -1104,13 +1187,15 @@ function initParentNode() {
           const countLoops = self.pkg39.countLoops;
           const countErrors = self.pkg39.countErrors;
 
+          // set nodeMap to nodeMaps[0]
+          changeNodeMap(0);
+
           // reconnect load image node
           for (const { node, type } of prevConnectedLinks) {
             MAIN.connectOutput(type, node);
           }
 
-          const original = toOriginalCanvas;
-          const virtual = toVirtualCanvas;
+          const flow = changeNodeMap;
           const find = findNodesByName;
           const findLast = findNodesByNameFromLast;
           const findOne = findNodeByName;
@@ -1169,42 +1254,35 @@ try {
         if (!this.pkg39.isInitialized) {
           throw new Error("pkg39 has not been initialized.");
         }
+
+        this.pkg39.loadedImages = [];
   
         // get images in directory
         let d = this.pkg39.DIR_PATH.value;
         if (d && d.trim() !== "") {
-          this.pkg39.loadedImages = await loadImages(d);
-
-          // convert to camelcase
-          this.pkg39.loadedImages = this.pkg39.loadedImages.map(e => {
-            return {
-              imagePath: e["image_path"],
-              imageName: e["image_name"],
-              maskPath: e["mask_path"],
-              maskName: e["mask_name"],
+          const images = await loadImages(d);
+          for (const image of images) {
+            try {
+              const workflow = JSON.parse(image.info.workflow);
+              const prompt = JSON.parse(image.info.prompt);
+              this.pkg39.loadedImages.push({
+                imagePath: image["image_path"],
+                imageName: image["image_name"],
+                maskPath: image["mask_path"],
+                maskName: image["mask_name"],
+                width: image.width,
+                height: image.height,
+                format: image.format,
+                workflow,
+                prompt,
+              });
+            } catch(err) {
+              console.error(err);
             }
-          });
-        } else {
-          this.pkg39.loadedImages = [];
+          }
         }
       } catch(err) {
         console.error(err);
-        this.pkg39.loadedImages = [];
-      }
-    }).bind(this);
-
-    this.pkg39.getMetadata = (async function() {
-      if (!this.pkg39.isInitialized) {
-        throw new Error("pkg39 has not been initialized.");
-      }
-
-      let i = this.pkg39.selectedImage;
-      if (i) {
-        let p = i.imagePath;
-        let m = await loadMetadata(p);
-        return m;
-      } else {
-        return null;
       }
     }).bind(this);
 
@@ -1356,14 +1434,13 @@ function initCommandNode() {
   text += `\n// error: A callback function when an error occurred in command node.`;
   text += `\n//         Default function is set to next().`;
   text += `\n\n// ## Global methods`;
-  text += `\n// original(): Set to search area as original workflow.`;
-  text += `\n// virtual(index): Set to search area as image workflow.`;
+  text += `\n// flow(index): Set to search area as specific flow.`;
   text += `\n// find("TYPE"|"TITLE") => NodeArray`;
   text += `\n// findLast("TYPE"|"TITLE") => NodeArray`;
   text += `\n// findOne("TYPE"|"TITLE") => Node`;
   text += `\n// findOneLast("TYPE"|"TITLE") => Node`;
-  text += `\n// findOneById(id) => Node: Only search for original workflow.`;
-  text += `\n// create("TYPE") => Node: Create a new node in image workflow.`;
+  text += `\n// findOneById(id) => Node`;
+  text += `\n// create("TYPE") => Node: Create a new node in virtual workflow.`;
   text += `\n// remove("TYPE"|"TITLE"|NodeArray)`;
   text += `\n// removeAll(): Remove all nodes in virtual workflow.`;
   text += `\n// enable("TYPE"|"TITLE"|NodeArray)`;
@@ -1396,14 +1473,38 @@ function initCommandNode() {
   text += `\n// node.remove()`;
   text += `\n// node.enable()`;
   text += `\n// node.disable()`;
-  text += `\n// node.serialize() => Object`;
   text += `\n// node.putOnRight(Node)`;
   text += `\n// node.putOnBottom(Node)`;
   text += `\n// node.moveToRight()`;
   text += `\n// node.moveToBottom()`;
-  text += `\n// node.hires(w, h) => [UpscalerNode, SamplerNode]: This method must be executed from ksampler node.`;
-  text += `\n// node.hires(scale) => [UpscalerNode, SamplerNode]`;
+  text += `\n// node.hires(w, h) => [UpscalerNode, SamplerNode]: This method must be executed from the node has LATENT output.`;
+  text += `\n// node.hires(scale) => [UpscalerNode, SamplerNode]:: This method must be executed from the node has LATENT output.`;
+  text += `\n// node.encode() => Node: This method must be executed from the node has IMAGE output.`;
+  text += `\n// node.decode() => Node: This method must be executed from the node has LATENT output.`;
+  text += `\n// node.save() => Node: This method must be executed from the node has IMAGE output.`;
   w.value = text;
+  w.prevValue = text;
+  w.isChanged = false;
+  
+  w.callback = (newValue) => {
+    if (!w.isChanged) {
+      if (w.prevValue !== newValue) {
+        w.isChanged = true;
+        w.element.addEventListener("blur", updateHandler);
+      }
+    }
+  }
+
+  async function updateHandler() {
+    w.element.removeEventListener("blur", updateHandler);
+    w.isChanged = false;
+    w.prevValue = w.value;
+    for (const node of app.graph._nodes) {
+      if (isParentNode(node)) {
+        await node.pkg39.setImage();
+      }
+    }
+  }
 
   // fix widget size
   setTimeout(() => {
@@ -1443,15 +1544,15 @@ function loopSound() {
 }
 
 function getParentId(node) {
-  return node?.properties?.pkg39?.[0];
+  return node?.properties?.pkg39?.parentId;
 }
 
 function getOriginalId(node) {
-  return node?.properties?.pkg39?.[1];
+  return node?.properties?.pkg39?.originalId;
 }
 
 function isVirtualNode(node) {
-  return Array.isArray(node?.properties?.pkg39);
+  return typeof node?.properties?.pkg39 === "object";
 }
 
 function getRandomSeed() {
@@ -1540,41 +1641,6 @@ function getPathFromURL(url) {
     dir = "/" + dir;
   }
   return `ComfyUI${dir}${subdir}${filename}`;
-}
-
-async function loadMetadata(filePath) {
-  const response = await api.fetchApi(`/shinich39/pkg39/load_metadata`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", },
-    body: JSON.stringify({ path: filePath }),
-  });
-
-  if (response.status !== 200) {
-    throw new Error(response.statusText);
-  }
-
-  const data = await response.json();
-
-  let workflow, prompt;
-  try {
-    workflow = JSON.parse(data.info.workflow);
-  } catch(err) {
-    console.error(err);
-  }
-
-  try {
-    prompt = JSON.parse(data.info.prompt);
-  } catch(err) {
-    console.error(err);
-  }
-
-  return {
-    width: data.width,
-    height: data.height,
-    format: data.format,
-    workflow: workflow,
-    prompt: prompt,
-  };
 }
 
 function setMaskWidgetEvents(widget) {

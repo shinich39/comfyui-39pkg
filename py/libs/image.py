@@ -60,6 +60,37 @@ def get_images(dir_path):
       })
   return image_list
 
+def get_images_with_metadata(dir_path):
+  image_list = []
+  if os.path.isdir(dir_path):
+    for file in os.listdir(dir_path):      
+      # mask
+      if file.startswith("."):
+        continue
+
+      image_name, image_ext = os.path.splitext(file)
+      image_path = Path(os.path.join(dir_path, file)).as_posix()
+      mask_name = "." + file
+      mask_path = Path(os.path.join(dir_path, mask_name)).as_posix()
+
+      with Image.open(image_path) as image:
+        if isinstance(image, PngImageFile):
+          width = image.width
+          height = image.height
+          info = image.info
+          format = image.format
+          image_list.append({
+            "image_path": image_path,
+            "image_name": image_name,
+            "mask_path": mask_path if os.path.exists(mask_path) else None,
+            "mask_name": mask_name,
+            "width": width,
+            "height": height,
+            "info": info,
+            "format": format,
+          })
+  return image_list
+
 @PromptServer.instance.routes.post("/shinich39/pkg39/load_images")
 async def load_images(request):
   try:
@@ -68,33 +99,8 @@ async def load_images(request):
   
     chk_dir(CACHE_DIR)
 
-    image_list = get_images(file_path)
+    image_list = get_images_with_metadata(file_path)
     return web.json_response(image_list)
-  except Exception:
-    print(traceback.format_exc())
-    return web.Response(status=400)
-  
-@PromptServer.instance.routes.post("/shinich39/pkg39/load_metadata")
-async def load_metadata(request):
-  try:
-    req = await request.json()
-    file_path = req["path"]
-
-    with Image.open(file_path) as image:
-      if not isinstance(image, PngImageFile):
-        raise Exception("Only supported for PNG format")
-      
-      width = image.width
-      height = image.height
-      info = image.info
-      format = image.format
-
-      return web.json_response({
-        "width": width,
-        "height": height,
-        "info": info,
-        "format": format,
-      })
   except Exception:
     print(traceback.format_exc())
     return web.Response(status=400)

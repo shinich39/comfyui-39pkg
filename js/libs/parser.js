@@ -21,7 +21,12 @@ const SAMPLER_KEYS = [
   "sampler_name",
 ];
 
-function getNodeMap({ workflow, prompt, sampler }) {
+/**
+ * 
+ * @param {object} info 
+ * @returns 
+ */
+function getNodeMap({ workflow, sampler }) {
   let w = JSON.parse(JSON.stringify(workflow)),
       f = [], 
       b = [];
@@ -126,6 +131,11 @@ function getSamplerNodes({ workflow, prompt }) {
     });
 }
 
+/**
+ * 
+ * @param {object} info 
+ * @returns 
+ */
 function getLastNode({ workflow, sampler }) {
   workflow = JSON.parse(JSON.stringify(workflow));
   workflow = unwind(workflow);

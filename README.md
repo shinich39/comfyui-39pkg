@@ -49,10 +49,15 @@ In auto queue mode, ignore ComfyUI errors. (Link error, ...)
 Commnad has default guide lines.  
 You should create command node after create nodes to use.  
 Copy and paste to command node and use it.  
-You can test your code to change command node.
+You can test your code to change command node.  
 
 - Full code of Hi-Res fix
 ```js
+// Create a "VAE Encode" node and connect IMAGE input of "Load image" node
+// Create any node for saving image and you can customize the options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
+
 // Upscale options
 var VAE_ENCODE_NODE_ID = 2;
 var SAVE_NODE_ID = 3;
@@ -63,10 +68,6 @@ var CFG = 6;
 var SAMPLER_NAME = "euler";
 var SCHEDULER = "simple";
 
-// Create "VAE Encode" node and connect IMAGE input of "Load image" node
-// Create any node for saving image node and you can set options
-var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_NODE_ID);
 var vaeDecode = findOneLast("VAE Decode");
 var sampler = findOne("KSampler");
 var ckpt = findOne("Load Checkpoint");
@@ -92,6 +93,11 @@ sound();
 
 - Full code of inpaint
 ```js
+// Create a "VAE Encdoe (for Inpainting)" node and connect IMAGE input and MASK input of "Load image" node
+// Create any node for saving image and you can customize the options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
+
 // Inpaint options
 var VAE_ENCODE_NODE_ID = 2;
 var SAVE_NODE_ID = 3;
@@ -99,10 +105,6 @@ var DENOISE = 1;
 var STEPS = 30;
 var CFG = 6;
 
-// Create "VAE Encdoe (for Inpainting)" node and connect IMAGE input and MASK input of "Load image" node
-// Create any node for saving image and you can set options
-var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_NODE_ID);
 var vaeDecode = findOneLast("VAE Decode");
 var sampler = findOneLast("KSampler");
 var ckpt = findOne("Load Checkpoint");
@@ -118,10 +120,12 @@ remove("Preview Image");
 remove("Save Image");
 remove("Image Save");
 
+// remove nodes created for Hi-Res fix.
 find("Upscale Latent").forEach(e => {
   if (!e.hasConnectedOutput) { e.remove() };
 });
 
+// remove nodes created for Hi-Res fix.
 find("KSampler").forEach(e => {
   if (!e.hasConnectedOutput) { e.remove() };
 });

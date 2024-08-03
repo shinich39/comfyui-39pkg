@@ -1409,7 +1409,9 @@ async function promptQueuedHandler() {
   if (isAutoQueue && isErrored && isChanged) {
     hideError();
     setTimeout(() => {
-      startQueue();
+      if (getQueueSize() < 1) {
+        startQueue();
+      }
     }, 1024);
   }
 }
@@ -1855,7 +1857,7 @@ app.registerExtension({
   setup() {
     setTimeout(() => {
       isInitialized = true;
-    }, 512);
+    }, 1024);
   },
   nodeCreated(node) {
     if (isLoadImageNode(node)) {

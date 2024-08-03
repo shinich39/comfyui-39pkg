@@ -641,7 +641,7 @@ function initParentNode() {
 
             return true;
           },
-          getInput: function(name) {
+          getInputNode: function(name) {
             if (!name) {
               console.error(new Error(`Argument not found.`));
               return false;
@@ -663,6 +663,30 @@ function initParentNode() {
             }
 
             return returnNodeObject(outputNode);
+          },
+          getOutputNode: function(name) {
+            if (!name) {
+              console.error(new Error(`Argument not found.`));
+              return [];
+            }
+            const outputNode = node;
+            const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
+            if (!output || !output.links) {
+              return [];
+            }
+
+            const links = app.graph.links?.filter(e => e && output.links.indexOf(e.id) > -1);
+            if (!links || links.length < 1) {
+              return [];
+            }
+
+            const outputNodeIds = links.map(e => e.target_id);
+            const outputNodes = app.graph._nodes.filter(e => outputNodeIds.indexOf(e.id) > -1);
+            if (!outputNodes) {
+              return [];
+            }
+
+            return outputNodes.map(e => returnNodeObject(e));
           },
           connectInput: function(name, outputNode) {
             if (!name || !outputNode) {
@@ -688,30 +712,6 @@ function initParentNode() {
               }
             }
             return true;
-          },
-          getOutput: function(name) {
-            if (!name) {
-              console.error(new Error(`Argument not found.`));
-              return [];
-            }
-            const outputNode = node;
-            const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (!output || !output.links) {
-              return [];
-            }
-
-            const links = app.graph.links?.filter(e => e && output.links.indexOf(e.id) > -1);
-            if (!links || links.length < 1) {
-              return [];
-            }
-
-            const outputNodeIds = links.map(e => e.target_id);
-            const outputNodes = app.graph._nodes.filter(e => outputNodeIds.indexOf(e.id) > -1);
-            if (!outputNodes) {
-              return [];
-            }
-
-            return outputNodes.map(e => returnNodeObject(e));
           },
           connectOutput: function(name, inputNodes) {
             if (!name || !inputNodes) {

@@ -78,9 +78,9 @@ function initCommandNode() {
   text += `\n// node.setValues(values{})`;
   text += `\n// node.getValue("WIDGET_NAME") => Any`;
   text += `\n// node.setValue("WIDGET_NAME", "VALUE")`;
-  text += `\n// node.getInput("INPUT_NAME") => Node`;
+  text += `\n// node.getInputNode("INPUT_NAME") => Node`;
+  text += `\n// node.getOutputNode("OUTPUT_NAME") => NodeArray`;
   text += `\n// node.connectInput("INPUT_NAME", Node): Connect to output of target node.`;
-  text += `\n// node.getOutput("OUTPUT_NAME") => NodeArray`;
   text += `\n// node.connectOutput("OUTPUT_NAME", Node|NodeArray): Connect to input of target node.`;
   text += `\n// node.replace(Node): Inherit all connections and values from target node.`;
   text += `\n// node.enable()`;

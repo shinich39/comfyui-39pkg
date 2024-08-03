@@ -3,7 +3,6 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-const NODE_NAME = "shinich39.pkg39.menu";
 const MENU_NAME = "Send to pkg39";
 
 function getPathFromURL(url) {
@@ -58,7 +57,7 @@ async function sendTopkg39() {
 }
 
 app.registerExtension({
-	name: NODE_NAME,
+	name: "shinich39.pkg39.menu",
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
 
     // add "Send to pkg39" to preview image menu

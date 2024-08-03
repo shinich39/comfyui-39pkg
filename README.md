@@ -84,9 +84,9 @@ newSampler.setValue("steps", STEPS);
 vaeEncode.connectOutput("LATENT", newUpscaler);
 
 sampler.remove();
-remove("Empty Latent Image");
-remove("Preview Image");
-remove("Save Image");
+remove("EmptyLatentImage");
+remove("PreviewImage");
+remove("SaveImage");
 
 sound();
 ```
@@ -115,20 +115,9 @@ sampler.setValue("denoise", DENOISE);
 sampler.setValue("cfg", CFG);
 sampler.setValue("steps", STEPS);
 
-remove("Empty Latent Image");
-remove("Preview Image");
-remove("Save Image");
-remove("Image Save");
-
-// remove nodes created for Hi-Res fix.
-find("Upscale Latent").forEach(e => {
-  if (!e.hasConnectedOutput) { e.remove() };
-});
-
-// remove nodes created for Hi-Res fix.
-find("KSampler").forEach(e => {
-  if (!e.hasConnectedOutput) { e.remove() };
-});
+remove("EmptyLatentImage");
+remove("PreviewImage");
+remove("SaveImage");
 
 sound();
 ```
@@ -179,27 +168,30 @@ find("KSampler").forEach(e => {
 - Set specific checkpoint 
 ```js
 // case 1
-var ckpt = findOneById(1); // Load Checkpoint
-ckpt.connectOutput("MODEL", findOneLast("KSampler"));
-ckpt.connectOutput("CLIP", find("CLIPTextEncode"));
-ckpt.connectOutput("VAE", find("VAE Decode"));
+var ckpt_name = "CHECKPOINT.safetensor";
+find("Load Checkpoint").forEach(e => e.setValues("ckpt_name", ckpt_name));
 
 // case 2
-var ckpt = findOneById(1); // Load Checkpoint
-var ckpt_name = ckpt.getValue("ckpt_name");
-find("Load Checkpoint").forEach(e => e.setValue("ckpt_name", ckpt_name));
+var newCkpt = findOneById(1); // Load Checkpoint
+var oldCkpt = findOne("Load Checkpoint");
+oldCkpt.replace(newCkpt);
+oldCkpt.remove();
+```
 
-// case 3
-var ckpt1 = findOneById(1); // Load Checkpoint
-var ckpt2 = findOne("Load Checkpoint");
-ckpt1.replace(ckpt2);
-ckpt2.remove();
+- Change KSampler node
+```js
+var newSampler = findOneById(1); // KSampler
+var oldSampler = findOneLast("KSampler");
+oldSampler.replace(newSampler);
+oldSampler.remove();
 ```
 
 - Add save node
 ```js
-// The node has LATENT output
-findOneLast("KSampler").decode().save().setValue("filename_prefix", "pkg39");
+var sampler = findOneLast("KSampler");
+var vaeDecode = sampler.decode();
+var save = vaeDecode.save();
+save.setValue("filename_prefix", "pkg39");
 ```
 
 - Add Hi-Res fix

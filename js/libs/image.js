@@ -3,18 +3,33 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { getSamplerNodes, getNodeMap } from "./parser.js";
+import {
+  isLoadImageNode, 
+  isPkg39Node, 
+  getLoaderId,
+  getPreviousId,
+  getRandomSeed,
+  hideError,
+  isErrorOccurred,
+  isAutoQueueMode,
+  getQueueSize,
+  startQueue,
+  cancelQueue,
+  setAutoQueue,
+  unsetAutoQueue,
+  renderCanvas,
+  isSoundPlayed,
+  playSound,
+  loopSound,
+  isCommandNode,
+} from "./pkg39-utils.js";
 import * as util from "./util.min.js";
 
 let isInitialized = false;
-const CLASS_NAMES = ["LoadImage39", "Command39"];
-const NODE_NAME = "shinich39.pkg39.image";
 const MASK_COLOR = {r: 0, g: 0, b: 0, rgb: "rgb(0,0,0)", };
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
-const MIN_SEED = 0;
-const MAX_SEED = parseInt("0xffffffffffffffff", 16);
-const STEPS_OF_SEED = 10;
 
 const DEFAULT_SAMPLER_NODE_NAME = "KSampler";
 const DEFAULT_SAVE_NODE_NAME = "SaveImage";
@@ -22,101 +37,8 @@ const DEFAULT_ENCODE_NODE_NAME = "VAEEncode";
 const DEFAULT_DECODE_NODE_NAME = "VAEDecode";
 const DEFAULT_UPSCALER_NODE_NAME = "LatentUpscale";
 
-
-// add notification element
-const AUDIO_ELEMENT = document.createElement("audio");
-AUDIO_ELEMENT.src = `/shinich39/pkg39/sound?path=${encodeURIComponent("./mp3/sound.mp3")}`;
-AUDIO_ELEMENT.volume = 1;
-document.body.appendChild(AUDIO_ELEMENT);
-
-function isParentNode(node) {
-  return CLASS_NAMES[0] === node.comfyClass;
-}
-
-function isCommandNode(node) {
-  return CLASS_NAMES[1] === node.comfyClass;
-}
-
 function getImageURL(filePath) {
   return `/shinich39/pkg39/image?path=${encodeURIComponent(filePath)}&rand=${Date.now()}`;
-}
-
-function renderCanvas() {
-  app.canvas.draw(true, true);
-}
-
-function showError(err) {
-  console.error(err);
-  
-  let msg;
-  if (typeof err === "string") {
-    msg = err;
-  } else if (err.stack && err.message) {
-    msg = err.toString(); 
-  } else if (err.response) {
-    let msg = err.response.error.message;
-    if (err.response.error.details)
-    msg += ": " + err.response.error.details;
-    for (const [nodeID, nodeError] of Object.entries(err.response.node_errors)) {
-    msg += "\n" + nodeError.class_type + ":"
-      for (const errorReason of nodeError.errors) {
-        msg += "\n    - " + errorReason.message + ": " + errorReason.details
-      }
-    }
-  }
-
-  if (msg) {
-    app.ui.dialog.show(msg);
-    renderCanvas();
-  }
-}
-
-function hideError() {
-  app.ui.dialog.close();
-  app.lastNodeErrors = null;
-}
-
-function isErrorOccurred() {
-  return app.lastNodeErrors && Object.keys(app.lastNodeErrors).length > 0;
-  // if (app.ui?.dialog?.element) {
-  //   return app.ui.dialog.element.style.display !== "none" && 
-  //     app.ui.dialog.element.style.display !== "";
-  // } else {
-  //   return false;
-  // }
-}
-
-function isAutoQueueMode() {
-  return document.querySelector("input[name='AutoQueueMode']:checked")?.value === "instant";
-}
-
-function getQueueSize() {
-  return app.ui.lastQueueSize ?? 0;
-}
-
-function startQueue() {
-  app.queuePrompt(0, app.ui.batchCount);
-}
-
-async function cancelQueue() {
-  await api.interrupt();
-}
-
-function setAutoQueue() {
-  if (!isAutoQueueMode()) {
-    document.querySelector("input[name='AutoQueueMode']")?.click();
-  }
-}
-
-function unsetAutoQueue() {
-  if (isAutoQueueMode()) {
-    for (const elem of Array.prototype.slice.call(document.querySelectorAll("input[name='AutoQueueMode']"))) {
-      if (elem.value === "") {
-        elem.click();
-        break;
-      }
-    }
-  }
 }
 
 function initParentNode() {
@@ -394,7 +316,7 @@ function initParentNode() {
           for (const nl of nm) {
             let newNodes = [];
             for (const n of nl) {
-              let node = app.graph._nodes.find(e => getOriginalId(e) === n.id);
+              let node = app.graph._nodes.find(e => getPreviousId(e) === n.id);
               if (node) {
                 newNodes.push(node);
               }
@@ -490,8 +412,8 @@ function initParentNode() {
       // set properties
       for (const n of graph._nodes) {
         n.properties.pkg39 = {
-          parentId: this.id,
-          originalId: n.id,
+          loaderId: this.id,
+          previousId: n.id,
           isEnabled: n.mode === 0,
           isDisabled: n.mode === 4,
         }
@@ -546,7 +468,7 @@ function initParentNode() {
 
         // enable nodes in flow
         for (const oNode of app.graph._nodes) {
-          if (!isVirtualNode(oNode)) {
+          if (!isPkg39Node(oNode)) {
             continue;
           }
           let isEnabled = false;
@@ -607,16 +529,39 @@ function initParentNode() {
           title: node.title,
           node: node,
           type: node.comfyClass || node.type,
+          getValues: function() {
+            let result = {};
+            if (node.widgets) {
+              for (const widget of node.widgets) {
+                result[widget.name] = widget.value;
+              }
+            }
+            return result;
+          },
+          setValues: function(values) {
+            values = values ?? {};
+            if (node.widgets) {
+              for (const [key, value] of Object.entries(values)) {
+                const widget = node.widgets.find(e => e.name === key);
+                if (widget) {
+                  widget.value = value;
+                }
+              }
+            }
+            return true;
+          },
           getValue: function(name) {
             if (!name) {
-              return;
+              console.error(new Error(`Argument not found.`));
+              return false;
             }
             const widget = node.widgets?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
             return widget?.value ?? null;
           },
           setValue: function(name, value) {
             if (!name) {
-              return;
+              console.error(new Error(`Argument not found.`));
+              return false;
             }
             const widget = node.widgets?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
             if (widget) {
@@ -624,55 +569,69 @@ function initParentNode() {
             }
             return true;
           },
-          replace: function(targetNode) {
+          replace: function(targetNode, isInheritValues = false) {
             if (!targetNode) {
+              console.error(new Error(`Argument not found.`));
               return false;
             }
             if (targetNode.isPkg39) {
               targetNode = targetNode.node;
             }
             if (node.type !== targetNode.type) {
+              console.error(new Error(`Target node type is not ${node.type}`));
               return false;
             }
 
-            if (targetNode.inputs) {
-              const inputNode = targetNode;
-              for (const input of inputNode.inputs) {
+            // inherit connected inputs
+            if (node.inputs) {
+              for (const input of node.inputs) {
                 let outputNode;
                 let outputSlot;
                 if (input.link) {
-                  const link = app.graph.links?.find(e => e && e.id === input.link);
+                  const link = app.graph.links.find(e => e && e.id === input.link);
                   outputNode = app.graph._nodes.find(e => e.id === link.origin_id);
                   outputSlot = link.origin_slot;
 
-                  const inputSlot = inputNode.findInputSlot(input.name);
-                  inputNode.disconnectInput(inputSlot);
+                  const inputSlot = node.findInputSlot(input.name);
+                  node.disconnectInput(inputSlot);
 
-                  const nodeSlot = node.findInputSlot(input.name);
+                  const nodeSlot = targetNode.findInputSlot(input.name);
                   if (nodeSlot > -1) {
-                    outputNode.connect(outputSlot, node, nodeSlot);
+                    outputNode.connect(outputSlot, targetNode, nodeSlot);
                   }
                 }
               }
             }
 
-            if (targetNode.outputs) {
-              const outputNode = targetNode;
-              for (const output of outputNode.outputs) {
+            // inherit connected outputs
+            if (node.outputs && app.graph.links) {
+              for (const output of node.outputs) {
                 if (output.links) {
-                  // fix error links size updated during process
+                  // fix error link size updated during disconnect
                   const links = JSON.parse(JSON.stringify(output.links));
                   for (const linkId of links) {
-                    const link = app.graph.links?.find(e => e && e.id === linkId);
+                    const link = app.graph.links.find(e => e && e.id === linkId);
                     const inputNode = app.graph._nodes.find(e => e.id === link.target_id);
                     const inputSlot = link.target_slot;
   
                     inputNode.disconnectInput(inputSlot);
   
-                    const nodeSlot = node.findOutputSlot(output.name);
+                    const nodeSlot = targetNode.findOutputSlot(output.name);
                     if (nodeSlot > -1) {
-                      node.connect(nodeSlot, inputNode, inputSlot);
+                      targetNode.connect(nodeSlot, inputNode, inputSlot);
                     }
+                  }
+                }
+              }
+            }
+
+            // inherit widget values
+            if (isInheritValues) {
+              if (node.widgets && targetNode.widgets) {
+                for (const widget of node.widgets) {
+                  const w = targetNode.widgets.find(e => e.name === widget.name);
+                  if (w) {
+                    w.value = widget.value
                   }
                 }
               }
@@ -684,7 +643,8 @@ function initParentNode() {
           },
           getInput: function(name) {
             if (!name) {
-              return;
+              console.error(new Error(`Argument not found.`));
+              return false;
             }
             const inputNode = node;
             const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
@@ -706,6 +666,7 @@ function initParentNode() {
           },
           connectInput: function(name, outputNode) {
             if (!name || !outputNode) {
+              console.error(new Error(`Argument not found.`));
               return false;
             }
             if (outputNode.isPkg39) {
@@ -730,6 +691,7 @@ function initParentNode() {
           },
           getOutput: function(name) {
             if (!name) {
+              console.error(new Error(`Argument not found.`));
               return [];
             }
             const outputNode = node;
@@ -753,6 +715,7 @@ function initParentNode() {
           },
           connectOutput: function(name, inputNodes) {
             if (!name || !inputNodes) {
+              console.error(new Error(`Argument not found.`));
               return false;
             }
             if (!Array.isArray(inputNodes)) {
@@ -791,6 +754,7 @@ function initParentNode() {
           },
           putOnRight: function(targetNode) {
             if (!targetNode) {
+              console.error(new Error(`Argument not found.`));
               return false;
             }
             if (targetNode.isPkg39) {
@@ -801,6 +765,7 @@ function initParentNode() {
           },
           putOnBottom: function(targetNode) {
             if (!targetNode) {
+              console.error(new Error(`Argument not found.`));
               return false;
             }
             if (targetNode.isPkg39) {
@@ -990,7 +955,7 @@ function initParentNode() {
       const removeAllNodes = function() {
         for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
           const n = app.graph._nodes[i];
-          if (getParentId(n) === self.id) {
+          if (getLoaderId(n) === self.id) {
             app.graph.remove(n);
           }
         }
@@ -998,13 +963,14 @@ function initParentNode() {
 
       const bypassAllNodes = function(b = true) {
         for (const node of app.graph._nodes) {
-          if (isVirtualNode(node)) {
+          if (isPkg39Node(node)) {
             node.mode = b ? 4 : 0;
           }
         }
       }
 
-      const createNode = function(name, options) {
+      const createNode = function(name, values, options) {
+        values = values ?? {};
         options = { select: true, shiftY: 0, before: false, ...(options || {}) };
         const node = LiteGraph.createNode(name);
         if (!node) {
@@ -1012,8 +978,8 @@ function initParentNode() {
         }
 
         node.properties.pkg39 = {
-          parentId: self.id,
-          originalId: -1,
+          loaderId: self.id,
+          previousId: -1,
           isEnabled: true,
           isDisabled: false,
         }
@@ -1022,6 +988,15 @@ function initParentNode() {
           node.color = DEFAULT_NODE_COLORS.yellow.color;
           node.bgcolor = DEFAULT_NODE_COLORS.yellow.bgcolor;
           node.groupcolor = DEFAULT_NODE_COLORS.yellow.groupcolor;
+        }
+
+        if (node.widgets) {
+          for (const [key, value] of Object.entries(values)) {
+            const widget = node.widgets.find(e => e.name === key);
+            if (widget) {
+              widget.value = value;
+            }
+          }
         }
 
         app.graph.add(node);
@@ -1079,12 +1054,20 @@ function initParentNode() {
           }
         }
 
-        const upscaler = createNode(DEFAULT_UPSCALER_NODE_NAME);
-        upscaler.putOnRight(this);
+        const upscaler = createNode(DEFAULT_UPSCALER_NODE_NAME, {
+          width: w,
+          height: h,
+        });
+        upscaler.putOnBottom(this);
         upscaler.moveToBottom();
         
-        const sampler = createNode(isSampler ? this.type : DEFAULT_SAMPLER_NODE_NAME);
-        sampler.putOnRight(this);
+        let sampler;
+        if (isSampler) {
+          sampler = createNode(this.type, this.getValues());
+        } else {
+          sampler = createNode(DEFAULT_SAMPLER_NODE_NAME);
+        }
+        sampler.putOnBottom(this);
         sampler.moveToBottom();
 
         this.connectOutput("LATENT", upscaler);
@@ -1096,20 +1079,12 @@ function initParentNode() {
           }
         }
 
-        // connect sampler outputs
-        sampler.connectOutput("LATENT", outputNodes);
-
-        // inherit values from this node
-        if (isSampler) {
-          for (const {name, value} of widgetValues) {
-            sampler.setValue(name, value);
-          }
-        }
-        
+        // connect upscaler -> sampler
         upscaler.connectOutput("LATENT", sampler);
-        upscaler.setValue("width", w);
-        upscaler.setValue("height", h);
 
+        // connect sampler -> outputNodes
+        sampler.connectOutput("LATENT", outputNodes);
+        
         return [upscaler, sampler];
       }
 
@@ -1170,7 +1145,7 @@ function initParentNode() {
       }
 
       const prevConnectedLinks = prevConnectedTargets.map(t => {
-        const node = returnNodeObject(app.graph._nodes.find(e => getOriginalId(e) === t.id));
+        const node = returnNodeObject(app.graph._nodes.find(e => getPreviousId(e) === t.id));
         return {
           node,
           type: t.type,
@@ -1235,8 +1210,8 @@ try {
       try {
         const nodes = [];
         for (const n of app.graph._nodes) {
-          const parentId = getParentId(n);
-          if (parentId && parentId === this.id) {
+          const loaderId = getLoaderId(n);
+          if (loaderId && loaderId === this.id) {
             nodes.push(n);
           } 
         }
@@ -1359,7 +1334,7 @@ try {
 
       for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
         const n = app.graph._nodes[i];
-        if (getParentId(n) === id) {
+        if (getLoaderId(n) === id) {
           app.graph.remove(n);
         }
       }
@@ -1400,175 +1375,9 @@ try {
   }
 }
 
-function initCommandNode() {
-  const self = this;
-
-  // set default value
-  const w = this.widgets?.[0];
-
-  let text = ``;
-  let nodeIndex = 1;
-  const nodes = app.graph._nodes
-    .filter(e => !!e && !isCommandNode(e) && !isVirtualNode(e))
-    .sort((a, b) => a.id - b.id);
-
-  for (const node of nodes) {
-    const nodeId = node.id;
-    // const nodeType = node.type;
-    const nodeTitle = node.title;
-    text += `var n${nodeIndex++} = findOneById(${nodeId}); // ${nodeTitle}\n`;
-  }
-
-  text += `\n// You can use javascript code here!`;
-  text += `\n// The code is executed after rendered new image workflow.`;
-  text += `\n// Image workflow has been set default range.`;
-  text += `\n// If image workflow has multiple flows, you may not be able to find nodes.`;
-  text += `\n// Only the first created command node will run.`;
-  text += `\n\n// ## Global variables`;
-  text += `\n// MAIN => Node: Load image node.`;
-  text += `\n// SEED => Number: Generated seed for current queue.`;
-  text += `\n// IS_INHERITED => Boolean: MAIN node has been inherited from previous Load image node.`;
-  text += `\n// countImages => Number: Number of images.`;
-  text += `\n// countQueues => Number: Number of queues.`;
-  text += `\n// countLoops => Number: Number of loops.`;
-  text += `\n// error: A callback function when an error occurred in command node.`;
-  text += `\n//         Default function is set to next().`;
-  text += `\n\n// ## Global methods`;
-  text += `\n// flow(index): Set to search area as specific flow.`;
-  text += `\n// find("TYPE"|"TITLE") => NodeArray`;
-  text += `\n// findLast("TYPE"|"TITLE") => NodeArray`;
-  text += `\n// findOne("TYPE"|"TITLE") => Node`;
-  text += `\n// findOneLast("TYPE"|"TITLE") => Node`;
-  text += `\n// findOneById(id) => Node`;
-  text += `\n// create("TYPE") => Node: Create a new node in virtual workflow.`;
-  text += `\n// remove("TYPE"|"TITLE"|NodeArray)`;
-  text += `\n// removeAll(): Remove all nodes in virtual workflow.`;
-  text += `\n// enable("TYPE"|"TITLE"|NodeArray)`;
-  text += `\n// enableAll(): Enable all nodes in virtual workflow.`;
-  text += `\n// disable("TYPE"|"TITLE"|NodeArray)`;
-  text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
-  text += `\n// sound(): Play the sound once.`;
-  text += `\n// start(): Start queue.`;
-  text += `\n// stop(): Disable auto queue mode and stop current queue.`;
-  text += `\n// loop(): Enable auto queue mode and start queue.`;
-  text += `\n// next(): Load next image.`;
-  text += `\n// skip(): skip current queue.`;
-  text += `\n\n// ## Node variables`;
-  text += `\n// node.isPkg39 => Boolean`;
-  text += `\n// node.isEnd => Boolean: The node has been placed ending point.`;
-  text += `\n// node.isStart => Boolean: The node has been placed starting point.`;
-  text += `\n// node.hasInput => Boolean`;
-  text += `\n// node.hasOutput => Boolean`;
-  text += `\n// node.hasConnectedInput => Boolean`;
-  text += `\n// node.hasConnectedOutput => Boolean`;
-  text += `\n// node.node => ComfyNode`;
-  text += `\n\n// ## Node methods`;
-  text += `\n// node.getValue("WIDGET_NAME") => Any`;
-  text += `\n// node.setValue("WIDGET_NAME", "VALUE")`;
-  text += `\n// node.replace(Node): Change all connections with the other same type node.`;
-  text += `\n// node.getInput("INPUT_NAME") => Node`;
-  text += `\n// node.connectInput("INPUT_NAME", Node): Connect to output of target node.`;
-  text += `\n// node.getOutput("OUTPUT_NAME") => NodeArray`;
-  text += `\n// node.connectOutput("OUTPUT_NAME", Node|NodeArray): Connect to input of target node.`;
-  text += `\n// node.remove()`;
-  text += `\n// node.enable()`;
-  text += `\n// node.disable()`;
-  text += `\n// node.putOnRight(Node)`;
-  text += `\n// node.putOnBottom(Node)`;
-  text += `\n// node.moveToRight()`;
-  text += `\n// node.moveToBottom()`;
-  text += `\n// node.hires(w, h) => [UpscalerNode, SamplerNode]: This method must be executed from the node has LATENT output.`;
-  text += `\n// node.hires(scale) => [UpscalerNode, SamplerNode]:: This method must be executed from the node has LATENT output.`;
-  text += `\n// node.encode() => Node: This method must be executed from the node has IMAGE output.`;
-  text += `\n// node.decode() => Node: This method must be executed from the node has LATENT output.`;
-  text += `\n// node.save() => Node: This method must be executed from the node has IMAGE output.`;
-  w.value = text;
-  w.prevValue = text;
-  w.isChanged = false;
-  
-  w.callback = (newValue) => {
-    if (!w.isChanged) {
-      if (w.prevValue !== newValue) {
-        w.isChanged = true;
-        w.element.addEventListener("blur", updateHandler);
-      }
-    }
-  }
-
-  async function updateHandler() {
-    w.element.removeEventListener("blur", updateHandler);
-    w.isChanged = false;
-    w.prevValue = w.value;
-    for (const node of app.graph._nodes) {
-      if (isParentNode(node)) {
-        await node.pkg39.setImage();
-      }
-    }
-  }
-
-  // fix widget size
-  setTimeout(() => {
-    this.setSize(this.size);
-    this.setDirtyCanvas(true, true);
-    // renderCanvas();
-  }, 1);
-}
-
-function isSoundPlayed() {
-  return !AUDIO_ELEMENT.paused;
-}
-
-function playSound() {
-  AUDIO_ELEMENT.loop = false;
-  AUDIO_ELEMENT.play();
-}
-
-function loopSound() {
-  let pageX = 0, pageY = 0;
-  const stopHandler = function(e) {
-    if (!pageX || !pageY) {
-      pageX = e.pageX;
-      pageY = e.pageY;
-    } else {
-      if (Math.abs(pageX - e.pageX) + Math.abs(pageY - e.pageY) > 100) {
-        document.removeEventListener("mousemove", stopHandler);
-        AUDIO_ELEMENT.pause();
-      }
-    }
-  }
-
-  document.addEventListener("mousemove", stopHandler);
-
-  AUDIO_ELEMENT.loop = true;
-  AUDIO_ELEMENT.play();
-}
-
-function getParentId(node) {
-  return node?.properties?.pkg39?.parentId;
-}
-
-function getOriginalId(node) {
-  return node?.properties?.pkg39?.originalId;
-}
-
-function isVirtualNode(node) {
-  return typeof node?.properties?.pkg39 === "object";
-}
-
-function getRandomSeed() {
-  let max = Math.min(1125899906842624, MAX_SEED);
-  let min = Math.max(-1125899906842624, MIN_SEED);
-  let range = (max - min) / (STEPS_OF_SEED / 10);
-  return Math.floor(Math.random() * range) * (STEPS_OF_SEED / 10) + min;
-}
-
-function getNodeByOriginalId(originalId) {
-  return app.graph._nodes?.find(e => getOriginalId(e) === originalId);
-}
-
 function getCommandValue() {
   for (const node of app.graph._nodes) {
-    if (node.comfyClass === CLASS_NAMES[1]) {
+    if (isCommandNode(node)) {
       const v = node.widgets?.[0].value;
       if (v && v !== "") {
         return v;
@@ -1584,7 +1393,7 @@ async function promptQueuedHandler() {
   let isErrored = isErrorOccurred();
 
   for (const node of app.graph._nodes) {
-    if (node.comfyClass === CLASS_NAMES[0]) {
+    if (isLoadImageNode(node)) {
       const countImages = node.pkg39.loadedImages.length;
       const prevIndex = node.pkg39.getIndex();
       node.pkg39.updateIndex();
@@ -1619,28 +1428,6 @@ async function loadImages(dirPath) {
   const data = await response.json();
 
   return data;
-}
-
-async function getBlobFromURL(url) {
-  const response = fetch(url);
-  const blob = await response.blob();
-  return blob;
-}
-
-function getPathFromURL(url) {
-  let filename = url.searchParams.get("filename");
-  if (filename && filename !== "") {
-    filename = "/" + filename;
-  }
-  let subdir = url.searchParams.get("subfolder");
-  if (subdir && subdir !== "") {
-    subdir = "/" + subdir;
-  }
-  let dir = url.searchParams.get("type");
-  if (dir && dir !== "") {
-    dir = "/" + dir;
-  }
-  return `ComfyUI${dir}${subdir}${filename}`;
 }
 
 function setMaskWidgetEvents(widget) {
@@ -2041,7 +1828,7 @@ function pointerUpEvent(e) {
 
   // reset all canvas
   for (const node of app.graph._nodes) {
-    if (node.comfyClass === CLASS_NAMES[0]) {
+    if (isLoadImageNode(node)) {
       const w = node.widgets?.find(e => e.name === "maskeditor");
       if (w) {
         // call save event
@@ -2064,17 +1851,15 @@ document.addEventListener('pointerup', (event) => pointerUpEvent(event));
 api.addEventListener("promptQueued", promptQueuedHandler);
 
 app.registerExtension({
-	name: NODE_NAME,
+	name: "shinich39.pkg39.image",
   setup() {
     setTimeout(() => {
       isInitialized = true;
     }, 512);
   },
   nodeCreated(node) {
-    if (isParentNode(node)) {
+    if (isLoadImageNode(node)) {
       initParentNode.apply(node);
-    } else if (isCommandNode(node)) {
-      initCommandNode.apply(node);
     }
   }
 });

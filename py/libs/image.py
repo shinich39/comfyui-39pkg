@@ -84,7 +84,7 @@ def get_images_with_metadata(dir_path):
             "image_path": image_path,
             "image_name": image_name,
             "mask_path": mask_path if os.path.exists(mask_path) else None,
-            "mask_name": mask_name,
+            "mask_name": mask_name if os.path.exists(mask_path) else None,
             "width": width,
             "height": height,
             "info": info,
@@ -150,7 +150,10 @@ async def save_mask_image(request):
       original_pil.putalpha(new_alpha)
       original_pil.save(mask_path, compress_level=4, pnginfo=metadata)
 
-    return web.json_response({ "mask_path": mask_path })
+    return web.json_response({
+      "mask_name": mask_name,
+      "mask_path": mask_path,
+    })
   
 @PromptServer.instance.routes.post("/shinich39/pkg39/remove_mask_image")
 async def remove_mask_image(request):

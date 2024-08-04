@@ -118,7 +118,7 @@ function initParentNode() {
           w.lasty = -1;
           w.lasttime = 0;
 
-          setMaskWidgetEvents(w);
+          setMaskWidgetEvents.apply(this, [w]);
 
           const originalImg = new Image();
           w.originalImg = originalImg;
@@ -1441,6 +1441,7 @@ async function loadImages(dirPath) {
 }
 
 function setMaskWidgetEvents(widget) {
+  const node = this;
   widget.initializeCanvasPanZoom = initializeCanvasPanZoom;
   widget.invalidatePanZoom = invalidatePanZoom;
   widget.showBrush = showBrush;
@@ -1809,6 +1810,12 @@ function setMaskWidgetEvents(widget) {
 
     this.maskPath = data.mask_path;
 
+    // set to loaded image
+    if (node?.pkg39?.selectedImage) {
+      node.pkg39.selectedImage.maskName = data.mask_name;
+      node.pkg39.selectedImage.maskPath = data.mask_path;
+    }
+
     // reload mask
     // this.maskImgLoaded = false;
     // this.maskCtx.clearRect(0,0,this.maskCanvas.width,this.maskCanvas.height);
@@ -1825,6 +1832,14 @@ function setMaskWidgetEvents(widget) {
         path: this.originalPath,
       }),
     });
+
+    this.maskPath = null;
+
+    // set to loaded image
+    if (node?.pkg39?.selectedImage) {
+      node.pkg39.selectedImage.maskName = null;
+      node.pkg39.selectedImage.maskPath = null;
+    }
 
     // reload mask
     this.maskImgLoaded = false;

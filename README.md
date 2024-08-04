@@ -52,11 +52,6 @@ You can test your code to change command node.
 
 - Full code of Hi-Res fix
 ```js
-// Create a "VAE Encode" node and connect IMAGE input of "Load image" node
-// Create any node for saving image and you can customize the options
-var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_NODE_ID);
-
 // Upscale options
 var VAE_ENCODE_NODE_ID = 2;
 var SAVE_NODE_ID = 3;
@@ -66,6 +61,11 @@ var STEPS = 30;
 var CFG = 6;
 var SAMPLER_NAME = "euler";
 var SCHEDULER = "simple";
+
+// Create a "VAE Encode" node and connect IMAGE input of "Load image" node
+// Create any node for saving image and you can customize the options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
 
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOne("KSampler");
@@ -93,17 +93,17 @@ sound();
 
 - Full code of inpaint
 ```js
-// Create a "VAE Encdoe (for Inpainting)" node and connect IMAGE input and MASK input of "Load image" node
-// Create any node for saving image and you can customize the options
-var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_NODE_ID);
-
 // Inpaint options
 var VAE_ENCODE_NODE_ID = 2;
 var SAVE_NODE_ID = 3;
 var DENOISE = 1;
 var STEPS = 30;
 var CFG = 6;
+
+// Create a "VAE Encdoe (for Inpainting)" node and connect IMAGE input and MASK input of "Load image" node
+// Create any node for saving image and you can customize the options
+var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
+var save = findOneById(SAVE_NODE_ID);
 
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOneLast("KSampler");

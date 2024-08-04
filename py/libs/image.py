@@ -80,6 +80,7 @@ def get_images_with_metadata(dir_path):
           info = image.info
           format = image.format
           image_list.append({
+            "dir_path": dir_path,
             "image_path": image_path,
             "image_name": image_name,
             "mask_path": mask_path if os.path.exists(mask_path) else None,

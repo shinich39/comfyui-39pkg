@@ -91,11 +91,11 @@ function getQueueSize() {
   return app.ui.lastQueueSize ?? 0;
 }
 
-function startQueue() {
+function startGeneration() {
   app.queuePrompt(0, app.ui.batchCount);
 }
 
-async function cancelQueue() {
+async function cancelGeneration() {
   await api.interrupt();
 }
 
@@ -161,8 +161,8 @@ export {
   isErrorOccurred,
   isAutoQueueMode,
   getQueueSize,
-  startQueue,
-  cancelQueue,
+  startGeneration,
+  cancelGeneration,
   setAutoQueue,
   unsetAutoQueue,
   renderCanvas,

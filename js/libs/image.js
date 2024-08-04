@@ -13,8 +13,8 @@ import {
   isErrorOccurred,
   isAutoQueueMode,
   getQueueSize,
-  startQueue,
-  cancelQueue,
+  startGeneration,
+  cancelGeneration,
   setAutoQueue,
   unsetAutoQueue,
   renderCanvas,
@@ -296,7 +296,7 @@ function initParentNode() {
       // render image workflow
       try {
         this.pkg39.removeWorkflow();
-        this.pkg39.loadWorkflow(this.pkg39.selectedImage);
+        this.pkg39.loadWorkflow();
       } catch(err) {
         console.error(err);
       }
@@ -304,7 +304,10 @@ function initParentNode() {
       renderCanvas();
     }).bind(this);
 
-    this.pkg39.loadWorkflow = (function(selectedImage) {
+    this.pkg39.loadWorkflow = (function() {
+      const self = this;
+
+      let { selectedImage, selectedIndex } = this.pkg39 ?? {};
       if (!selectedImage || !selectedImage.workflow) {
         return;
       }
@@ -396,7 +399,6 @@ function initParentNode() {
         return [w, prevConnectedTargets];
       }
 
-      const self = this;
       let width = selectedImage.width;
       let height = selectedImage.height
       let prompt = selectedImage.prompt;
@@ -1028,7 +1030,7 @@ function initParentNode() {
 
         const isSampler = ["KSampler", "KSamplerAdvanced"].indexOf(this.type) > -1; 
         const node = this.node;
-        const outputNodes = this.getOutput("LATENT");
+        const outputNodes = this.getOutputNode("LATENT");
         const inputNodes = [];
         if (node.inputs) {
           for (const input of node.inputs) {
@@ -1139,7 +1141,7 @@ function initParentNode() {
         return node;
       }
 
-      const nextQueue = function() {
+      const loadNextImage = function() {
         self.pkg39.updateIndex();
         self.pkg39.setImage();
       }
@@ -1155,8 +1157,14 @@ function initParentNode() {
       ;(() => {
         try {
           const MAIN = returnNodeObject(self);
+          const DIR_PATH = selectedImage.dirPath;
+          const IMAGE_PATH = selectedImage.imagePath;
+          const MASK_PATH = selectedImage.maskPath;
+          const IMAGE_NAME = selectedImage.imageName;
+          const MASK_NAME = selectedImage.maskName;
+          const INDEX = selectedIndex;
           const SEED = getRandomSeed();
-          const IS_INHERITED = prevConnectedLinks.length > 0;
+          // const IS_INHERITED = prevConnectedLinks.length > 0;
           const countImages = self.pkg39.loadedImages.length;
           const countQueues = self.pkg39.countQueues;
           const countLoops = self.pkg39.countLoops;
@@ -1165,7 +1173,7 @@ function initParentNode() {
           // set nodeMap to nodeMaps[0]
           changeNodeMap(0);
 
-          // reconnect load image node
+          // re-connect load image node
           for (const { node, type } of prevConnectedLinks) {
             MAIN.connectOutput(type, node);
           }
@@ -1184,11 +1192,11 @@ function initParentNode() {
           const removeAll = removeAllNodes;
           const create = createNode;
           const sound = playSound;
-          const start = () => { startQueue(); }
-          const stop = () => { unsetAutoQueue(); cancelQueue(); }
-          const skip = () => { cancelQueue(); }
-          const loop = () => { setAutoQueue(); startQueue(); }
-          const next = () => { nextQueue(); }
+          const start = () => { startGeneration(); }
+          const cancel = () => { cancelGeneration(); }
+          const next = () => { loadNextImage(); }
+          const loop = () => { setAutoQueue(); startGeneration(); }
+          const stop = () => { unsetAutoQueue(); cancelGeneration(); }
           let error = (err) => { console.error(err); };
           let __command__ = getCommandValue();
           __command__ = `
@@ -1410,7 +1418,7 @@ async function promptQueuedHandler() {
     hideError();
     setTimeout(() => {
       if (getQueueSize() < 1) {
-        startQueue();
+        startGeneration();
       }
     }, 1024);
   }

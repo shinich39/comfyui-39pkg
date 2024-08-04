@@ -15,6 +15,7 @@ Using this package requires a little understanding of javascript syntax.
 - Edit mask on the preview image with mouse control.
 - Play notification sound each queue.
 - When you focus on load image node, you can control index with keyboard.
+- Add bracket keybinds: (), {}, []
 
 ## Nodes
 

@@ -119,7 +119,7 @@ function initCommandNode() {
     w.prevValue = w.value;
     for (const node of app.graph._nodes) {
       if (isLoadImageNode(node)) {
-        await node.pkg39.setImage();
+        await node.pkg39.renderImage();
       }
     }
   }

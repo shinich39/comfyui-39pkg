@@ -80,6 +80,7 @@ newSampler.setValue("scheduler", SCHEDULER);
 newSampler.setValue("denoise", DENOISE);
 newSampler.setValue("cfg", CFG);
 newSampler.setValue("steps", STEPS);
+newSampler.setValue("seed", SEED); // random seed
 vaeEncode.connectOutput("LATENT", newUpscaler);
 
 sampler.remove();
@@ -113,6 +114,7 @@ save.connectInput("images", vaeDecode);
 sampler.setValue("denoise", DENOISE);
 sampler.setValue("cfg", CFG);
 sampler.setValue("steps", STEPS);
+sampler.setValue("seed", SEED); // random seed
 
 remove("EmptyLatentImage");
 remove("PreviewImage");

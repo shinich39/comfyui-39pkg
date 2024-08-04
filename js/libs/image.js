@@ -1403,8 +1403,8 @@ async function promptQueuedHandler() {
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
         isChanged = true;
+        await node.pkg39.setImage();
       }
-      await node.pkg39.setImage();
     }
   }
 

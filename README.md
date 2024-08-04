@@ -54,76 +54,86 @@ You can test your code to change command node.
 - Full code of Hi-Res fix
 ```js
 // Upscale options
-var VAE_ENCODE_NODE_ID = 2;
-var SAVE_IMAGE_NODE_ID = 3;
-var SCALE_BY = 1.5;
-var DENOISE = 0.5;
+var VAE_ENCODE_NODE_ID = 24;
+var SAVE_IMAGE_NODE_ID = 25;
 var STEPS = 30;
-var CFG = 6;
+var CFG = 8;
 var SAMPLER_NAME = "euler";
 var SCHEDULER = "simple";
+var DENOISE = 0.5;
+var SCALE_BY = 2;
 
-// Create a "VAE Encode" node and connect IMAGE input of "Load image" node
-// Create any node for saving image and you can customize the options
 var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_IMAGE_NODE_ID);
-
+var saveImage = findOneById(SAVE_IMAGE_NODE_ID);
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOne("KSampler");
 var ckpt = findOne("Load Checkpoint");
+
+vaeEncode.connectInput("pixels", MAIN);
 vaeEncode.connectInput("vae", ckpt);
-save.connectInput("images", vaeDecode);
+
+saveImage.connectInput("images", vaeDecode);
 
 // new sampler inherit values and connections from sampler
 var [newUpscaler, newSampler] = sampler.hires(SCALE_BY);
+newSampler.setValue("seed", SEED); // random seed
+newSampler.setValue("steps", STEPS);
+newSampler.setValue("cfg", CFG);
 newSampler.setValue("sampler_name", SAMPLER_NAME);
 newSampler.setValue("scheduler", SCHEDULER);
 newSampler.setValue("denoise", DENOISE);
-newSampler.setValue("cfg", CFG);
-newSampler.setValue("steps", STEPS);
-newSampler.setValue("seed", SEED); // random seed
-vaeEncode.connectOutput("LATENT", newUpscaler);
+
+newUpscaler.connectInput("samples", vaeEncode);
 
 sampler.remove();
 remove("EmptyLatentImage");
 remove("PreviewImage");
 remove("SaveImage");
-
-sound();
+remove("ImageSave"); // WAS
 ```
 
 - Full code of inpaint
 ```js
 // Inpaint options
-var VAE_ENCODE_NODE_ID = 2;
-var SAVE_IMAGE_NODE_ID = 3;
-var SCHEDULER = "normal";
-var DENOISE = 1;
+var VAE_ENCODE_NODE_ID = 826;
+var SET_LATENT_NOISE_MASK_NODE_ID = 828;
+var SAVE_IMAGE_NODE_ID = 16;
 var STEPS = 30;
-var CFG = 6;
+var CFG = 8;
+var SAMPLER_NAME = "euler";
+var SCHEDULER = "normal";
+var DENOISE = 0.8;
 
-// Create a "VAE Encdoe (for Inpainting)" node and connect IMAGE input and MASK input of "Load image" node
-// Create any node for saving image and you can customize the options
 var vaeEncode = findOneById(VAE_ENCODE_NODE_ID);
-var save = findOneById(SAVE_IMAGE_NODE_ID);
-
+var setLatentNoiseMask = findOneById(SET_LATENT_NOISE_MASK_NODE_ID);
+var saveImage = findOneById(SAVE_IMAGE_NODE_ID);
+var ckpt = findOne("Load Checkpoint");
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOneLast("KSampler");
-var ckpt = findOne("Load Checkpoint");
+
+vaeEncode.connectInput("pixels", MAIN);
 vaeEncode.connectInput("vae", ckpt);
-vaeEncode.connectOutput("LATENT", sampler);
-save.connectInput("images", vaeDecode);
-sampler.setValue("denoise", DENOISE);
-sampler.setValue("cfg", CFG);
-sampler.setValue("steps", STEPS);
-sampler.setValue("scheduler", SCHEDULER);
+
+setLatentNoiseMask.connectInput("mask", MAIN);
+setLatentNoiseMask.connectInput("samples", vaeEncode);
+
+saveImage.connectInput("images", vaeDecode);
+
+sampler.connectInput("model", ckpt);
+sampler.connectInput("latent", setLatentNoiseMask);
 sampler.setValue("seed", SEED); // random seed
+sampler.setValue("steps", STEPS);
+sampler.setValue("cfg", CFG);
+// sampler.setValue("sampler_name", SAMPLER_NAME);
+sampler.setValue("scheduler", SCHEDULER);
+sampler.setValue("denoise", DENOISE);
 
 remove("EmptyLatentImage");
 remove("PreviewImage");
 remove("SaveImage");
-
-sound();
+remove("ImageSave"); // WAS
+remove("LatentUpscale");
+remove("VAEEncode");
 ```
 
 - Connect LATENT output of "Load image" node in each image workflow

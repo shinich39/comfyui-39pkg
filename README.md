@@ -14,6 +14,7 @@ Using this package requires a little understanding of javascript syntax.
 - Start batch process with exactly the same process.
 - Edit mask on the preview image with mouse control.
 - Play notification sound each queue.
+- When you focus on load image node, you can control index with keyboard.
 
 ## Nodes
 
@@ -96,6 +97,7 @@ sound();
 // Inpaint options
 var VAE_ENCODE_NODE_ID = 2;
 var SAVE_NODE_ID = 3;
+var SCHEDULER = "normal";
 var DENOISE = 1;
 var STEPS = 30;
 var CFG = 6;
@@ -114,6 +116,7 @@ save.connectInput("images", vaeDecode);
 sampler.setValue("denoise", DENOISE);
 sampler.setValue("cfg", CFG);
 sampler.setValue("steps", STEPS);
+sampler.setValue("scheduler", SCHEDULER);
 sampler.setValue("seed", SEED); // random seed
 
 remove("EmptyLatentImage");

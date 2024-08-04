@@ -153,6 +153,11 @@ function loopSound() {
   AUDIO_ELEMENT.play();
 }
 
+function selectNode(node) {
+  app.canvas.deselectAllNodes();
+  app.canvas.selectNode(node);
+}
+
 export {
   isLoadImageNode,
   isCommandNode,
@@ -172,4 +177,5 @@ export {
   isSoundPlayed,
   playSound,
   loopSound,
+  selectNode,
 }

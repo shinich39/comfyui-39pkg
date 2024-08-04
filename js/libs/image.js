@@ -5,6 +5,7 @@ import { api } from "../../../scripts/api.js";
 import { getSamplerNodes, getNodeMap } from "./parser.js";
 import {
   isLoadImageNode, 
+  isCommandNode,
   isPkg39Node, 
   getLoaderId,
   getPreviousId,
@@ -21,7 +22,7 @@ import {
   isSoundPlayed,
   playSound,
   loopSound,
-  isCommandNode,
+  selectNode,
 } from "./pkg39-utils.js";
 import * as util from "./util.min.js";
 
@@ -40,7 +41,7 @@ function getImageURL(filePath) {
   return `/shinich39/pkg39/image?path=${encodeURIComponent(filePath)}&rand=${Date.now()}`;
 }
 
-function initParentNode() {
+function initLoadImageNode() {
   try {
     const self = this;
 
@@ -54,6 +55,8 @@ function initParentNode() {
       selectedImage: null,
       selectedIndex: -1,
     };
+    
+    this.onKeyDown = (e) => keyDownEvent.apply(this, [e]);
 
     this.pkg39.init = (function() {
       const self = this;
@@ -261,7 +264,7 @@ function initParentNode() {
       w.maskImg.src = null;
     }).bind(this);
 
-    this.pkg39.setImage = (async function() {
+    this.pkg39.renderImage = (async function() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
@@ -1133,7 +1136,7 @@ function initParentNode() {
 
       const loadNextImage = function() {
         self.pkg39.updateIndex();
-        self.pkg39.setImage();
+        self.pkg39.renderImage();
       }
 
       const prevConnectedLinks = prevConnectedTargets.map(t => {
@@ -1268,7 +1271,7 @@ try {
 
         this.pkg39.resetCounter();
         await this.pkg39.loadImages();
-        await this.pkg39.setImage();
+        await this.pkg39.renderImage();
 
         console.log(`node #${this.id} has been initialized.`);
       } catch(err) {
@@ -1369,9 +1372,10 @@ try {
       }
     }
 
-    idxWidget.callback = function(v) {
+    idxWidget.callback = async function(v) {
       self.pkg39.resetCounter();
-      self.pkg39.setImage();
+      await self.pkg39.renderImage()
+      selectNode(self);
     }
   } catch(err) {
     console.error(err);
@@ -1403,7 +1407,7 @@ async function promptQueuedHandler() {
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
         isChanged = true;
-        await node.pkg39.setImage();
+        await node.pkg39.renderImage();
       }
     }
   }
@@ -1834,6 +1838,29 @@ function setMaskWidgetEvents(widget) {
   }
 }
 
+async function keyDownEvent(e) {
+  const { key } = e;
+  if (key === "ArrowLeft" || key === "ArrowUp") {
+    e.preventDefault();
+    e.stopPropagation();
+    this.pkg39.resetCounter();
+    this.pkg39.INDEX.value = this.pkg39.INDEX.value - 1;
+    await this.pkg39.renderImage()
+    selectNode(this);
+  } else if (key === "ArrowRight" || key === "ArrowDown") {
+    e.preventDefault();
+    e.stopPropagation();
+    this.pkg39.resetCounter();
+    this.pkg39.INDEX.value = this.pkg39.INDEX.value + 1;
+    await this.pkg39.renderImage()
+    selectNode(this);
+  } else if (key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    startGeneration();
+  }
+}
+
 function pointerUpEvent(e) {
   e.preventDefault();
 
@@ -1875,7 +1902,7 @@ app.registerExtension({
 	},
   nodeCreated(node) {
     if (isLoadImageNode(node)) {
-      initParentNode.apply(node);
+      initLoadImageNode.apply(node);
     }
   },
 });

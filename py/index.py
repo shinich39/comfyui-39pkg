@@ -9,7 +9,8 @@ from urllib.parse import unquote
 from PIL import Image
 
 from .libs.random import Random
-from .libs.image import LoadImage, Command
+from .libs.image import LoadImage
+from .libs.command import Command
 
 @PromptServer.instance.routes.get("/shinich39/pkg39/image")
 async def get_image(request):

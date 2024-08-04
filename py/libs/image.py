@@ -38,28 +38,6 @@ def chk_json(p):
 def get_now():
   return round(time.time() * 1000)
 
-def get_images(dir_path):
-  image_list = []
-  if os.path.isdir(dir_path):
-    for file in os.listdir(dir_path):
-      name, ext = os.path.splitext(file)
-      # not png
-      if ext.lower() not in VALID_EXTENSIONS:
-        continue
-      # mask
-      if file.startswith("."):
-        continue
-      # add full path
-      image_path = Path(os.path.join(dir_path, file)).as_posix()
-      mask_path = Path(os.path.join(dir_path, "." + file)).as_posix()
-      image_list.append({
-        "image_path": image_path,
-        "image_name": name,
-        "mask_path": mask_path if os.path.exists(mask_path) else None,
-        "mask_name": "." + name,
-      })
-  return image_list
-
 def get_images_with_metadata(dir_path):
   image_list = []
   if os.path.isdir(dir_path):
@@ -75,6 +53,7 @@ def get_images_with_metadata(dir_path):
 
       with Image.open(image_path) as image:
         if isinstance(image, PngImageFile):
+          is_mask_exists = os.path.exists(mask_path)
           width = image.width
           height = image.height
           info = image.info
@@ -83,8 +62,8 @@ def get_images_with_metadata(dir_path):
             "dir_path": dir_path,
             "image_path": image_path,
             "image_name": image_name,
-            "mask_path": mask_path if os.path.exists(mask_path) else None,
-            "mask_name": mask_name if os.path.exists(mask_path) else None,
+            "mask_path": mask_path if is_mask_exists else None,
+            "mask_name": mask_name if is_mask_exists else None,
             "width": width,
             "height": height,
             "info": info,
@@ -195,10 +174,9 @@ class LoadImage():
   RETURN_NAMES = ("IMAGE", "MASK", "FILENAME",)
 
   def exec(self, dir_path, index, mode, filename, **kwargs):
-    image_list = get_images(dir_path)
+    image_list = get_images_with_metadata(dir_path)
     image_path = image_list[index]["image_path"]
     mask_path = image_list[index]["mask_path"]
-
     image = Image.open(mask_path if mask_path else image_path)
     img = ImageOps.exif_transpose(image)
     image = img.convert("RGB")
@@ -211,25 +189,3 @@ class LoadImage():
       mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
 
     return (image, mask.unsqueeze(0), filename,)
-  
-  
-class Command():
-  def __init__(self):
-    pass
-
-  # prevent starting cached queue
-  @classmethod
-  def IS_CHANGED(s):
-    return None
-
-  @classmethod
-  def INPUT_TYPES(cls):
-    return {
-      "required": {
-        "command": ("STRING", {"default": "", "multiline": True}),
-      },
-    }
-  
-  CATEGORY = "pkg39"
-  RETURN_TYPES = ()
-  RETURN_NAMES = ()

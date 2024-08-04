@@ -1840,7 +1840,7 @@ function setMaskWidgetEvents(widget) {
 }
 
 async function keyDownEvent(e) {
-  const { key } = e;
+  const { key, ctrlKey, metaKey } = e;
   if (key === "ArrowLeft" || key === "ArrowUp") {
     e.preventDefault();
     e.stopPropagation();
@@ -1859,6 +1859,14 @@ async function keyDownEvent(e) {
     e.preventDefault();
     e.stopPropagation();
     startGeneration();
+  } else if (
+    (key === "r" && (ctrlKey || metaKey) ||
+    key === "F5"
+  )) {
+    e.preventDefault();
+    e.stopPropagation();
+    await this.pkg39?.updateDirPath();
+    selectNode(this);
   }
 }
 

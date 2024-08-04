@@ -41,7 +41,11 @@ def get_now():
 def get_images_with_metadata(dir_path):
   image_list = []
   if os.path.isdir(dir_path):
-    for file in os.listdir(dir_path):      
+    for file in os.listdir(dir_path):  
+      # not image
+      if not file.endswith(".png"):
+        continue
+
       # mask
       if file.startswith("."):
         continue

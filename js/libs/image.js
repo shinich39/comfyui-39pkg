@@ -55,7 +55,8 @@ function initLoadImageNode() {
       selectedImage: null,
       selectedIndex: -1,
     };
-    
+
+    // this.onSelected = (e) => this.setDirtyCanvas(true, true);
     this.onKeyDown = (e) => keyDownEvent.apply(this, [e]);
 
     this.pkg39.init = (function() {

@@ -1,3 +1,6 @@
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
+
 const LOAD_IMAGE_NODE_TYPE = "LoadImage39";
 const COMMAND_NODE_TYPE = "Command39";
 const MIN_SEED = 0;

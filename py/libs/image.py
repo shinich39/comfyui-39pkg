@@ -98,9 +98,7 @@ async def save_image(request):
 
     shutil.copyfile(src_path, dst_path)
 
-    image_list = get_images(CACHE_DIR)
-
-    return web.json_response(image_list)
+    return web.Response(status=200)
   except Exception:
     print(traceback.format_exc())
     return web.Response(status=400)

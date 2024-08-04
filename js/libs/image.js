@@ -25,7 +25,6 @@ import {
 } from "./pkg39-utils.js";
 import * as util from "./util.min.js";
 
-let isInitialized = false;
 const MASK_COLOR = {r: 0, g: 0, b: 0, rgb: "rgb(0,0,0)", };
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
@@ -256,8 +255,6 @@ function initParentNode() {
       w.element.style.height = this.size[0] - 32;
       w.originalImgLoaded = false;
       w.maskImgLoaded = false;
-      w.originalPath = null;
-      w.maskPath = null;
       w.originalCtx.clearRect(0,0,w.originalCanvas.width,w.originalCanvas.height);
       w.maskCtx.clearRect(0,0,w.maskCanvas.width,w.maskCanvas.height);
       w.originalImg.src = null;
@@ -281,17 +278,10 @@ function initParentNode() {
       }
 
       const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
-
-      this.pkg39.MASK.originalPath = imagePath;
-      this.pkg39.MASK.maskPath = maskPath;
       this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
       this.pkg39.MASK.maskImg.src = getImageURL(maskPath || imagePath);
       this.pkg39.FILENAME.value = imageName;
       this.pkg39.INDEX.value = i;
-
-      if (!isInitialized) {
-        return;
-      }
 
       // render image workflow
       try {
@@ -1238,6 +1228,7 @@ try {
           throw new Error("pkg39 has not been initialized.");
         }
 
+        // clear loaded images
         this.pkg39.loadedImages = [];
   
         // get images in directory
@@ -1278,6 +1269,8 @@ try {
         this.pkg39.resetCounter();
         await this.pkg39.loadImages();
         await this.pkg39.setImage();
+
+        console.log(`node #${this.id} has been initialized.`);
       } catch(err) {
         console.error(err);
       }
@@ -1363,8 +1356,13 @@ try {
     dpWidget.options.getMinHeight = () => 64;
     dpWidget.options.getMaxHeight = () => 64;
     dpWidget.prevValue = dpWidget.value;
+    dpWidget.isInitialized = false;
     dpWidget.callback = function(currValue) {
-      if (this.prevValue !== currValue) {
+      // fix update before initialize
+      if (!this.isInitialized) {
+        this.isInitialized = true;
+        this.prevValue = currValue;
+      } else if (this.prevValue !== currValue) {
         this.prevValue = currValue;
         idxWidget.value = 0;
         self.pkg39.updateDirPath();
@@ -1375,9 +1373,6 @@ try {
       self.pkg39.resetCounter();
       self.pkg39.setImage();
     }
-
-    // initialize after create
-    this.pkg39.updateDirPath();
   } catch(err) {
     console.error(err);
   }
@@ -1799,7 +1794,7 @@ function setMaskWidgetEvents(widget) {
     const dataURL = backupCanvas.toDataURL();
     const blob = dataURLToBlob(dataURL);
     formData.append('image', blob);
-    formData.append('path', this.originalPath);
+    formData.append('path', node.pkg39.selectedImage.imagePath);
 
     const response = await api.fetchApi('/shinich39/pkg39/save_mask_image', {
       method: 'POST',
@@ -1808,18 +1803,11 @@ function setMaskWidgetEvents(widget) {
 
     const data = await response.json();
 
-    this.maskPath = data.mask_path;
-
     // set to loaded image
     if (node?.pkg39?.selectedImage) {
       node.pkg39.selectedImage.maskName = data.mask_name;
       node.pkg39.selectedImage.maskPath = data.mask_path;
     }
-
-    // reload mask
-    // this.maskImgLoaded = false;
-    // this.maskCtx.clearRect(0,0,this.maskCanvas.width,this.maskCanvas.height);
-    // this.maskImg.src = getImageURL(this.maskPath);
   }
 
   async function removeMaskEvent() {
@@ -1829,11 +1817,9 @@ function setMaskWidgetEvents(widget) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        path: this.originalPath,
+        path: node.pkg39.selectedImage.imagePath,
       }),
     });
-
-    this.maskPath = null;
 
     // set to loaded image
     if (node?.pkg39?.selectedImage) {
@@ -1844,7 +1830,7 @@ function setMaskWidgetEvents(widget) {
     // reload mask
     this.maskImgLoaded = false;
     this.maskCtx.clearRect(0,0,this.maskCanvas.width,this.maskCanvas.height);
-    this.maskImg.src = getImageURL(this.originalPath);
+    this.maskImg.src = getImageURL(node.pkg39.selectedImage.imagePath);
   }
 }
 
@@ -1878,13 +1864,18 @@ api.addEventListener("promptQueued", promptQueuedHandler);
 app.registerExtension({
 	name: "shinich39.pkg39.image",
   setup() {
-    setTimeout(() => {
-      isInitialized = true;
-    }, 1024);
+    // ...
   },
+  async afterConfigureGraph(graphData, missingNodeTypes) {
+    for (const node of app.graph._nodes) {
+      if (isLoadImageNode(node)) {
+        await node.pkg39.updateDirPath();
+      }
+    }
+	},
   nodeCreated(node) {
     if (isLoadImageNode(node)) {
       initParentNode.apply(node);
     }
-  }
+  },
 });

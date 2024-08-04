@@ -32,9 +32,7 @@ async function saveImage(filePath) {
     throw new Error(response.statusText);
   }
 
-  const data = await response.json();
-
-  return data;
+  return true;
 }
 
 async function sendTopkg39() {

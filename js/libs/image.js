@@ -1856,9 +1856,9 @@ async function keyDownEvent(e) {
     await this.pkg39.renderImage()
     selectNode(this);
   } else if (
-    (key === "r" && (ctrlKey || metaKey) ||
+    (key === "r" && (ctrlKey || metaKey)) || 
     key === "F5"
-  )) {
+  ) {
     e.preventDefault();
     e.stopPropagation();
     await this.pkg39?.updateDirPath();

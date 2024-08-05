@@ -107,12 +107,9 @@ newUpscaler.connectInput("samples", vaeEncode);
 
 sampler.remove();
 
-if (countLoops > 0) {
-  stop();
-}
-
 onEnd = () => {
   if (countLoops > 0) {
+    stop();
     sound();
   }
 }

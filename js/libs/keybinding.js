@@ -1,0 +1,134 @@
+"use strict";
+
+import { app } from "../../../scripts/app.js";
+import { ComfyWidgets } from "../../../scripts/widgets.js";
+import { api } from "../../../scripts/api.js";
+
+let isSelectionEnabled = typeof window.getSelection !== "undefined";
+let selectedElement = null;
+let histories = [];
+
+const BRACKETS = {
+  "(": ["(",")"],
+  "{": ["{","}"],
+  "[": ["[","]"],
+  "<": ["<",">"],
+};
+
+function getSelectionRange(el) {
+  return [
+    el.selectionStart,
+    el.selectionEnd,
+  ];
+}
+
+function isSelected(el) {
+  return selectedElement && selectedElement.isSameNode(el);
+}
+
+function getHistory(el) {
+  if (!selectedElement || !el.isSameNode(selectedElement)) {
+    return;
+  }
+  if (
+    histories.length > 0 && 
+    histories[histories.length - 1].newText === el.value
+  ) {
+    return histories.pop();
+  }
+}
+
+function isEnabled(key) {
+  if (Object.keys(BRACKETS).indexOf(key) === -1) {
+    return false;
+  }
+  for (const node of app.graph._nodes) {
+    if (node.comfyClass === "Keybinding39") {
+      if (!node.widgets) {
+        continue;
+      }
+      const widget = node.widgets.find(e => e.name === key);
+      if (widget) {
+        return widget.value;
+      }
+    }
+  }
+  return false;
+}
+
+app.registerExtension({
+	name: "shinich39.pkg39.keybinding",
+	init() {
+    if (!isSelectionEnabled) {
+      return;
+    }
+
+    // textarea keybinding
+    const STRING = ComfyWidgets.STRING;
+    ComfyWidgets.STRING = function (node, inputName, inputData) {
+      const r = STRING.apply(this, arguments);
+
+      if (inputData[1]?.multiline) {
+        const widget = r.widget;
+        if (!widget) {
+          return r;
+        }
+
+        const element = widget.element;
+        if (!element) {
+          return r;
+        }
+
+        element.addEventListener("keydown", function(e) {
+          const { key, ctrlKey } = e;
+          if (isEnabled(key)) {
+            e.preventDefault();
+            let brackets = BRACKETS[key];
+            let oldRange = getSelectionRange(e.target);
+            let oldText = e.target.value;
+            let oldPart = oldText.substring(oldRange[0], oldRange[1]);
+            let newPart = `${brackets[0]}${oldPart}${brackets[1]}`;
+            let newText = oldText.substring(0, oldRange[0]) + 
+              newPart +
+              oldText.substring(oldRange[1]);
+
+            let newRange = [oldRange[0] + 1, oldRange[1] + 1];
+
+            e.target.value = newText;
+            e.target.focus();
+            e.target.setSelectionRange(newRange[0], newRange[1]);
+
+            if (!isSelected(e.target)) {
+              selectedElement = e.target;
+              histories = [];
+            }
+
+            histories.push({
+              // element: e.target,
+              oldText: oldText,
+              newText: newText,
+              brackets: brackets,
+              oldRange: oldRange,
+              newRange: newRange,
+            });
+          } else if (key === "z" && ctrlKey) {
+            const history = getHistory(e.target);
+            if (history) {
+              e.preventDefault();
+              const { oldText, oldRange } = history;
+              e.target.value = oldText;
+              e.target.focus();
+              e.target.setSelectionRange(oldRange[0], oldRange[1]);
+            }
+          }
+        });
+
+        // clear histories
+        // element.addEventListener("blur", (e) => { histories = []; });
+      }
+
+      return r;
+    };
+
+	},
+});

@@ -11,6 +11,7 @@ from PIL import Image
 from .libs.random import Random
 from .libs.image import LoadImage
 from .libs.command import Command
+from .libs.keybinding import Keybinding
 
 @PromptServer.instance.routes.get("/shinich39/pkg39/image")
 async def get_image(request):
@@ -45,12 +46,14 @@ async def get_sound(request):
 
 NODE_CLASS_MAPPINGS = {
   "Random39": Random,
+  "Keybinding39": Keybinding,
   "LoadImage39": LoadImage,
   "Command39": Command,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
   "Random39": "Random",
+  "Keybinding39": "Keybinding",
   "LoadImage39": "Load image",
   "Command39": "Command",
 }

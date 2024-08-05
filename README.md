@@ -22,6 +22,7 @@ Using this package requires a little understanding of javascript syntax.
 - Random
 - Load image
 - Command
+- Keybinding
 
 ## Usage
 
@@ -29,19 +30,21 @@ Using this package requires a little understanding of javascript syntax.
 Add node > pkg39 > ...  
 Search "39"
 
-### Random node  
-Create a new output when connect input.  
-Shuffle the connections after starting the queue.  
-
-### Bracket keybindings  
-When you type opening brackets \(, \{, \[ in textarea, bracket has closed and cursor move to inside of brackets.  
-If you selected text range, brackets enclose the text range.  
-
 ### Send to pkg39  
 After generate image, click the "Send to pkg39" button in context menu of "Preview Image" node.  
 The image copied to "/ComfyUI/pkg39_images" directory.  
 
-### Load image  
+### Random node  
+Create a new output when connect input.  
+Shuffle the connections after starting the queue.  
+
+### Keybinding node  
+You can enable keybinding in textarea.  
+Create a Keybinding node.  
+When keybinding node enabled and you type opening brackets in textarea, bracket has closed and cursor move to inside of brackets.  
+If you selected text range, brackets enclose the text range.  
+
+### Load image node  
 Default dir_path value is absolute path to pkg39_images.  
 You can edit mask on preview image.  
 Spin the wheel to change brush size after mouse over the preview image.  
@@ -54,7 +57,7 @@ Keybindings\(after select node\):
 - Arrows: Next, Previous image.
 - Enter: Start generation.
 
-### Command  
+### Command node  
 Commnad has default guide lines.  
 You should create command node after create nodes to use.  
 Copy and paste to command node and use it.  

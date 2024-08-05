@@ -3,8 +3,6 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-const MENU_NAME = "Send to pkg39";
-
 function getPathFromURL(url) {
   let filename = url.searchParams.get("filename");
   if (filename && filename !== "") {
@@ -68,7 +66,7 @@ app.registerExtension({
           optionIndex + 1,
           0,
           {
-            content: MENU_NAME,
+            content: "Send to pkg39",
             callback: () => {
               sendToPkg39.apply(this);
             },

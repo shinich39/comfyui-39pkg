@@ -3,11 +3,8 @@
 import { app } from "../../../../scripts/app.js";
 import { api } from "../../../../scripts/api.js";
 
-const CLASS_NAME = "Random39";
-const NODE_NAME = "pkg39.random";
-
 function isRandomNode(node) {
-  return node.comfyClass === CLASS_NAME;
+  return node.comfyClass === "Random39";
 }
 
 function shuffle(arr) {
@@ -309,10 +306,7 @@ function promptQueued({ detail }) {
 }
 
 app.registerExtension({
-	name: NODE_NAME,
-  setup() {
-    console.log(`${NODE_NAME} has been loaded.`);
-  },
+	name: "shinich39.pkg39.random",
 	nodeCreated(node, app) {
     if (!isRandomNode(node)) {
       return;

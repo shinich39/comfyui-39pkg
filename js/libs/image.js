@@ -3,6 +3,7 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { getSamplerNodes, getNodeMap } from "./parser.js";
+import * as util from "./util.min.js";
 import {
   isLoadImageNode, 
   isCommandNode,
@@ -23,8 +24,8 @@ import {
   playSound,
   loopSound,
   selectNode,
+  parseExecuteResponse,
 } from "./pkg39-utils.js";
-import * as util from "./util.min.js";
 
 const MASK_COLOR = {r: 0, g: 0, b: 0, rgb: "rgb(0,0,0)", };
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
@@ -54,6 +55,7 @@ function initLoadImageNode() {
       loadedImages: [],
       selectedImage: null,
       selectedIndex: -1,
+      state: {},
     };
 
     // this.onSelected = (e) => this.setDirtyCanvas(true, true);
@@ -115,8 +117,9 @@ function initLoadImageNode() {
           w.zoomRatio = 1.0;
           w.panX = 0;
           w.panY = 0;
-          w.brushSize = 10;
+          w.brushSize = 100;
           w.drawingMode = false;
+          w.movingMode = false;
           w.lastx = -1;
           w.lasty = -1;
           w.lasttime = 0;
@@ -250,6 +253,37 @@ function initLoadImageNode() {
       }
     }).bind(this);
 
+    this.pkg39.loadImageByFilePath = (async function(filePath) {
+      if (!this.pkg39.isInitialized) {
+        throw new Error("pkg39 has not been initialized.");
+      }
+
+      filePath = filePath.replace(/[\\\/]+/g, "/");
+      let dirPath = filePath.replace(/\/[^\/]+$/, "/");
+      let basename = filePath.replace(dirPath, "");
+      let filename = basename.replace(/.[^.]+$/, "");
+
+      this.pkg39.resetCounter();
+      await this.pkg39.updateDirPath(dirPath);
+      await this.pkg39.loadImages();
+
+      let idx = this.pkg39.loadedImages.findIndex(e => {
+        return e.imageName === filename;
+      });
+
+      if (idx === -1) {
+        idx = 0;
+      }
+
+      this.pkg39.updateIndex(idx);
+      this.pkg39.clearImage();
+      this.pkg39.selectImage();
+      this.pkg39.renderImage();
+      await this.pkg39.renderWorkflow();
+      renderCanvas();
+      selectNode(this);
+    }).bind(this);
+
     this.pkg39.clearMask = (function() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
@@ -265,39 +299,62 @@ function initLoadImageNode() {
       w.maskImg.src = null;
     }).bind(this);
 
-    this.pkg39.renderImage = (async function() {
+    this.pkg39.clearImage = (async function() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
-
       this.pkg39.clearMask();
+      this.pkg39.removeWorkflow();
+    }).bind(this);
 
+    this.pkg39.selectImage = (async function() {
+      if (!this.pkg39.isInitialized) {
+        throw new Error("pkg39 has not been initialized.");
+      }
       let i = this.pkg39.getIndex();
       this.pkg39.selectedIndex = i;
       this.pkg39.selectedImage = this.pkg39.loadedImages[i];
       if (!this.pkg39.selectedImage) {
-        this.pkg39.INDEX.value = -1;
         this.pkg39.FILENAME.prevValue = "NO IMAGE";
         this.pkg39.FILENAME.value = "NO IMAGE";
         throw new Error(`No image in ${this.pkg39.DIR_PATH.value}`);
       }
+      this.pkg39.FILENAME.prevValue = this.pkg39.selectedImage.imageName;
+      this.pkg39.FILENAME.value = this.pkg39.selectedImage.imageName;
+    }).bind(this);
 
-      const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
-      this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
-      this.pkg39.MASK.maskImg.src = getImageURL(maskPath || imagePath);
-      this.pkg39.FILENAME.prevValue = imageName;
-      this.pkg39.FILENAME.value = imageName;
-      this.pkg39.INDEX.value = i;
+    this.pkg39.renderImage = (async function() {
+      if (!this.pkg39.isInitialized) {
+        throw new Error("pkg39 has not been initialized.");
+      }
+      if (!this.pkg39.selectedImage) {
+        return;
+      }
 
-      // render image workflow
       try {
-        this.pkg39.removeWorkflow();
+        const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
+        this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
+        this.pkg39.MASK.maskImg.src = getImageURL(maskPath || imagePath);
+      } catch(err) {
+        console.error(err);
+      }
+    }).bind(this);
+
+    // render image workflow
+    this.pkg39.renderWorkflow = (async function() {
+      if (!this.pkg39.isInitialized) {
+        throw new Error("pkg39 has not been initialized.");
+      }
+
+      if (!this.pkg39.selectedImage) {
+        return;
+      }
+
+      try {
         this.pkg39.loadWorkflow();
       } catch(err) {
         console.error(err);
       }
-
-      renderCanvas();
     }).bind(this);
 
     this.pkg39.loadWorkflow = (function() {
@@ -1137,9 +1194,13 @@ function initLoadImageNode() {
         return node;
       }
 
-      const loadNextImage = function() {
+      const loadNextImage = async function() {
         self.pkg39.updateIndex();
+        self.pkg39.clearImage();
+        self.pkg39.selectImage();
         self.pkg39.renderImage();
+        await self.pkg39.renderWorkflow();
+        renderCanvas();
       }
 
       const prevConnectedLinks = prevConnectedTargets.map(t => {
@@ -1152,6 +1213,7 @@ function initLoadImageNode() {
 
       ;(() => {
         try {
+          // variables
           const MAIN = returnNodeObject(self);
           const DIR_PATH = selectedImage.dirPath;
           const INDEX = selectedIndex;
@@ -1160,6 +1222,7 @@ function initLoadImageNode() {
           const MASK_PATH = selectedImage.maskPath;
           const MASK_NAME = selectedImage.maskName;
 
+          const STATE = self.pkg39.state;
           const SEED = getRandomSeed();
 
           const DATE = new Date();
@@ -1184,6 +1247,7 @@ function initLoadImageNode() {
             MAIN.connectOutput(type, node);
           }
 
+          // methods
           const flow = changeNodeMap;
           const find = findNodesByName;
           const findLast = findNodesByNameFromLast;
@@ -1202,16 +1266,51 @@ function initLoadImageNode() {
           const cancel = () => { cancelGeneration(); }
           const next = () => { loadNextImage(); }
           const loop = () => { setAutoQueue(); startGeneration(); }
-          const stop = () => { unsetAutoQueue(); } // cancelGeneration(); 
-          let error = (err) => { console.error(err); };
+          const stop = () => { unsetAutoQueue(); } // cancelGeneration();
+          const loadDir = async (dirPath) => {
+            if (typeof(dirPath) === "string") {
+              self.pkg39.resetCounter();
+              await self.pkg39.updateDirPath(dirPath);
+              await self.pkg39.loadImages();
+              self.pkg39.updateIndex(0);
+              self.pkg39.clearImage();
+              self.pkg39.selectImage();
+              self.pkg39.renderImage();
+              await self.pkg39.renderWorkflow();
+              renderCanvas();
+              selectNode(self);
+            } else {
+              throw new Error("loadDir argument must be String.");
+            }
+          }
+          const loadFile = async (filePath) => {
+            if (typeof(filePath) === "string") {
+              self.pkg39.resetCounter();
+              await self.pkg39.loadImageByFilePath(filePath);
+            } else if (Array.isArray(filePath)) {
+              self.pkg39.resetCounter();
+              await self.pkg39.loadImageByFilePath(filePath[0]);
+            } else {
+              throw new Error("loadFile argument must be String.");
+            }
+          }
+
+          // callbacks
+          let onEnd = null;
+          let onError = (err) => { console.error(err); };
+
+          // execute
           let __command__ = getCommandValue();
           __command__ = `
 try {
   ${__command__}
 } catch(err) {
-  error(err);
+  onError(err);
 }`;
           eval(__command__.trim());
+
+          // set callback
+          self.pkg39.onExecuted = onEnd;
         } catch(err) {
           console.error(err);
         }
@@ -1276,55 +1375,57 @@ try {
       }
     }).bind(this);
 
-    this.pkg39.updateDirPath = (async function() {
+    this.pkg39.updateDirPath = (function(str) {
       try {
         if (!this.pkg39.isInitialized) {
           throw new Error("pkg39 has not been initialized.");
         }
-
-        this.pkg39.resetCounter();
-        await this.pkg39.loadImages();
-        await this.pkg39.renderImage();
-
-        console.log(`node #${this.id} has been initialized.`);
+        this.pkg39.DIR_PATH.isCallbackEnabled = false; // prevent callback
+        this.pkg39.DIR_PATH.prevValue = str;
+        this.pkg39.DIR_PATH.value = str;
+        this.pkg39.DIR_PATH.isCallbackEnabled = true;
       } catch(err) {
         console.error(err);
       }
     }).bind(this);
 
-    this.pkg39.updateIndex = (function() {
+    this.pkg39.updateIndex = (function(idx) {
       try {
         if (!this.pkg39.isInitialized) {
           throw new Error("pkg39 has not been initialized.");
         }
+        this.pkg39.INDEX.isCallbackEnabled = false; // prevent callback
 
-        let i = this.pkg39.INDEX.value;
-        let m = this.pkg39.MODE.value;
         let images = this.pkg39.loadedImages;
-        if (images && images.length > 0) {
+        let m = this.pkg39.MODE.value;
+
+        if (typeof idx !== "number") {
+          idx = this.pkg39.INDEX.value;
           if (m === "increment") {
-            i += 1;
+            idx += 1;
           } else if (m === "decrement") {
-            i -= 1;
+            idx -= 1;
           } else if (m === "randomize") {
-            i = Math.floor(util.random(0, images.length));
+            idx = Math.floor(util.random(0, images.length));
           }
-        } else {
-          i = -1;
         }
     
-        if (this.pkg39.INDEX.value !== i) {
-          this.pkg39.INDEX.value = i;
+        if (!images || images.length < 1) {
+          idx = -1;
         }
+
+        this.pkg39.INDEX.value = idx;
 
         // increase counts
         this.pkg39.countQueues += 1;
         let n = this.pkg39.getIndex();
-        if (m === "increment" && n < i) {
+        if (m === "increment" && n < idx) {
           this.pkg39.countLoops += 1;
-        } else if (m === "decrement" && n > i) {
+        } else if (m === "decrement" && n > idx) {
           this.pkg39.countLoops += 1;
         }
+
+        this.pkg39.INDEX.isCallbackEnabled = true;
       } catch(err) {
         console.error(err);
       }
@@ -1340,6 +1441,7 @@ try {
         this.pkg39.countQueues = 0;
         this.pkg39.countLoops = 0;
         this.pkg39.countErrors = 0;
+        this.pkg39.state = {};
       } catch(err) {
         console.error(err);
       }
@@ -1368,32 +1470,47 @@ try {
     const modeWidget = this.pkg39.MODE;
     const maskWidget = this.pkg39.MASK;
 
+    dpWidget.isCallbackEnabled = false;
     dpWidget.options.getMinHeight = () => 64;
     dpWidget.options.getMaxHeight = () => 64;
     dpWidget.prevValue = dpWidget.value;
-    dpWidget.isInitialized = false;
-    dpWidget.callback = function(currValue) {
+    dpWidget.callback = async function(currValue) {
+      if (!this.isCallbackEnabled) {
+        return;
+      }
       // fix update before initialize
-      if (!this.isInitialized) {
-        this.isInitialized = true;
+      if (this.prevValue !== currValue) {
         this.prevValue = currValue;
-      } else if (this.prevValue !== currValue) {
-        this.prevValue = currValue;
-        idxWidget.value = 0;
-        self.pkg39.updateDirPath();
+        self.pkg39.resetCounter();
+        await self.pkg39.loadImages();
+        self.pkg39.updateIndex(0);
+        self.pkg39.clearImage();
+        self.pkg39.selectImage();
+        self.pkg39.renderImage();
+        await self.pkg39.renderWorkflow();
+        renderCanvas();
+        selectNode(self);
       }
     }
 
     fnWidget.callback = function(currValue) {
       if (this.prevValue !== currValue) {
-        alert("You can not change filename.");
         this.value = this.prevValue;
+        alert("You can not change filename.");
       }
     }
 
+    idxWidget.isCallbackEnabled = false;
     idxWidget.callback = async function(v) {
+      if (!this.isCallbackEnabled) {
+        return;
+      }
       self.pkg39.resetCounter();
-      await self.pkg39.renderImage()
+      self.pkg39.clearImage();
+      self.pkg39.selectImage();
+      self.pkg39.renderImage();
+      await self.pkg39.renderWorkflow();
+      renderCanvas();
       selectNode(self);
     }
   } catch(err) {
@@ -1426,7 +1543,11 @@ async function promptQueuedHandler() {
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
         isChanged = true;
-        await node.pkg39.renderImage();
+        node.pkg39.clearImage();
+        node.pkg39.selectImage();
+        node.pkg39.renderImage();
+        await node.pkg39.renderWorkflow();
+        renderCanvas();
       }
     }
   }
@@ -1439,6 +1560,22 @@ async function promptQueuedHandler() {
         startGeneration();
       }
     }, 1024);
+  }
+}
+
+async function executedHandler({ detail }) {
+  if (!detail?.output?.images) {
+    return;
+  }
+
+  const images = detail.output.images.map(e => {
+    return parseExecuteResponse(e).filePath;
+  });
+
+  for (const node of app.graph._nodes) {
+    if (isLoadImageNode(node) && typeof node.pkg39.onExecuted === "function") {
+      await node.pkg39.onExecuted(images);
+    }
   }
 }
 
@@ -1476,7 +1613,7 @@ function setMaskWidgetEvents(widget) {
   widget.maskCanvas.addEventListener('pointerleave', (event) => widget.hideBrush(widget, event));
   widget.maskCanvas.addEventListener('pointerdown', (event) => widget.pointerDownEvent(widget, event));
   widget.maskCanvas.addEventListener('pointermove', (event) => widget.drawMoveEvent(widget, event));
-  
+
   // Helper function to convert a data URL to a Blob object
   function dataURLToBlob(dataURL) {
     const parts = dataURL.split(';base64,');
@@ -1579,16 +1716,17 @@ function setMaskWidgetEvents(widget) {
   function handleWheelEvent(self, event) {
     event.preventDefault();
 
-    const canvasScale = app.canvas.ds.scale;
     const imageScale = this.originalCanvas.offsetWidth / this.originalCanvas.width;
 
     // adjust brush size
     if(event.deltaY < 0)
-      self.brushSize = Math.min(self.brushSize+(10 / canvasScale / imageScale), 100 / canvasScale / imageScale);
+      self.brushSize = Math.min(self.brushSize+(2 / imageScale), 100 / imageScale);
     else
-      self.brushSize = Math.max(self.brushSize-(10 / canvasScale / imageScale), 1);
+      self.brushSize = Math.max(self.brushSize-(2 / imageScale), 1);
 
     self.showBrush();
+
+    document.getElementById("graph-canvas").focus();
   }
 
   function pointerMoveEvent(self, event) {
@@ -1608,6 +1746,22 @@ function setMaskWidgetEvents(widget) {
     this.cursorY = event.pageY;
 
     self.showBrush();
+
+    // click wheel
+    if (self.movingMode) {
+      if (
+        typeof event.movementX === "number" && 
+        typeof event.movementY === "number"
+      ) {
+        app.canvas.ds.mouseDrag(
+          event.movementX,
+          event.movementY,
+        );
+  
+        app.canvas.draw(true, true);
+        return;
+      }
+    }
 
     let left_button_down = window.TouchEvent && event instanceof TouchEvent || event.buttons == 1;
     let right_button_down = [2, 5, 32].includes(event.buttons);
@@ -1736,7 +1890,7 @@ function setMaskWidgetEvents(widget) {
       return;
     }
 
-    if(event.ctrlKey) {
+    if (event.ctrlKey) {
       if (event.buttons == 1) {
         self.mousedown_x = event.clientX;
         self.mousedown_y = event.clientY;
@@ -1744,6 +1898,13 @@ function setMaskWidgetEvents(widget) {
         self.mousedown_panX = self.panX;
         self.mousedown_panY = self.panY;
       }
+      return;
+    }
+
+    selectNode(node);
+
+    if (event.buttons == 4) {
+      self.movingMode = true;
       return;
     }
 
@@ -1857,29 +2018,76 @@ function setMaskWidgetEvents(widget) {
 }
 
 async function keyDownEvent(e) {
-  const { key, ctrlKey, metaKey } = e;
-  if (key === "ArrowLeft" || key === "ArrowUp") {
+  const { key, ctrlKey, metaKey, shiftKey } = e;
+
+  if (key === "ArrowLeft") {
     e.preventDefault();
     e.stopPropagation();
     this.pkg39.resetCounter();
-    this.pkg39.INDEX.value = this.pkg39.INDEX.value - 1;
-    await this.pkg39.renderImage()
+    this.pkg39.updateIndex(this.pkg39.INDEX.value - 1);
+    this.pkg39.clearImage();
+    this.pkg39.selectImage();
+    this.pkg39.renderImage();
+    await this.pkg39.renderWorkflow();
+    renderCanvas();
     selectNode(this);
-  } else if (key === "ArrowRight" || key === "ArrowDown") {
+  } else if (key === "ArrowRight") {
     e.preventDefault();
     e.stopPropagation();
     this.pkg39.resetCounter();
-    this.pkg39.INDEX.value = this.pkg39.INDEX.value + 1;
-    await this.pkg39.renderImage()
+    this.pkg39.updateIndex(this.pkg39.INDEX.value + 1);
+    this.pkg39.clearImage();
+    this.pkg39.selectImage();
+    this.pkg39.renderImage();
+    await this.pkg39.renderWorkflow();
+    renderCanvas();
     selectNode(this);
-  } else if (
-    (key === "r" && (ctrlKey || metaKey)) || 
-    key === "F5"
-  ) {
+  } else if ((key === "r" && (ctrlKey || metaKey)) || key === "F5") {
     e.preventDefault();
     e.stopPropagation();
-    await this.pkg39?.updateDirPath();
+    this.pkg39.resetCounter();
+    await this.pkg39.loadImages();
+    this.pkg39.clearImage();
+    this.pkg39.selectImage();
+    this.pkg39.renderImage();
+    await this.pkg39.renderWorkflow();
+    renderCanvas();
     selectNode(this);
+  } else if (key === "-" || key === "=") {
+    e.preventDefault();
+    e.stopPropagation();
+    let n = key === "-" ? 1 : -1;
+    const prevScale = app.canvas.ds.scale;
+    const nextScale = Math.max(0.5, Math.min(10, Math.round((prevScale - n) * 10) / 10));
+    const cx = app.canvas.ds.element.width / 2;
+    const cy = app.canvas.ds.element.height / 2;
+    app.canvas.ds.changeScale(nextScale, [cx, cy]);
+    app.canvas.graph.change();
+    selectNode(this);
+
+    // fix brush size
+    if (this.pkg39?.MASK) {
+      this.pkg39.MASK.showBrush();
+    }
+  } else if (key === " ") {
+    if (this.pkg39?.MASK) {
+      this.pkg39.MASK.movingMode = true;
+      window.addEventListener("keyup", spaceBarUpEvent);
+    }
+  }
+}
+
+async function spaceBarUpEvent(e) {
+  e.preventDefault();
+
+  // remove event
+  window.removeEventListener("keyup", spaceBarUpEvent);
+
+  // reset all moving mode
+  for (const node of app.graph._nodes) {
+    if (isLoadImageNode(node)) {
+      node.pkg39.MASK.movingMode = false;
+    }
   }
 }
 
@@ -1896,9 +2104,16 @@ function pointerUpEvent(e) {
           w.saveMaskEvent();
         }
 
+        // select node
+        if (w.movingMode) {
+          selectNode(node);
+          document.getElementById("graph-canvas").focus();
+        }
+
         w.mousedown_x = null;
         w.mousedown_y = null;
         w.drawingMode = false;
+        w.movingMode = false;
       }
     }
   }
@@ -1907,24 +2122,52 @@ function pointerUpEvent(e) {
 // global event
 document.addEventListener('pointerup', (event) => pointerUpEvent(event));
 
-// after start new queue
+// after start a new queue
 api.addEventListener("promptQueued", promptQueuedHandler);
+
+// after image generated
+api.addEventListener("executed", executedHandler);
 
 app.registerExtension({
 	name: "shinich39.pkg39.image",
   setup() {
     // ...
   },
-  async afterConfigureGraph(graphData, missingNodeTypes) {
+  async afterConfigureGraph(missingNodeTypes) {
     for (const node of app.graph._nodes) {
       if (isLoadImageNode(node)) {
-        await node.pkg39.updateDirPath();
+        node.pkg39.resetCounter();
+        await node.pkg39.loadImages();
+        // node.pkg39.clearImage(); // prevent refresh on intialization
+        node.pkg39.selectImage();
+        node.pkg39.renderImage();
+        // await node.pkg39.renderWorkflow(); // prevent refresh on intialization
+        renderCanvas();
+
+        node.pkg39.DIR_PATH.isCallbackEnabled = true;
+        node.pkg39.INDEX.isCallbackEnabled = true;
       }
     }
 	},
   nodeCreated(node) {
     if (isLoadImageNode(node)) {
       initLoadImageNode.apply(node);
+
+      // workflow initialized
+      if (!app.configuringGraph) {
+        ;(async () => {
+          node.pkg39.resetCounter();
+          await node.pkg39.loadImages();
+          node.pkg39.clearImage();
+          node.pkg39.selectImage();
+          node.pkg39.renderImage();
+          await node.pkg39.renderWorkflow();
+          renderCanvas();
+
+          node.pkg39.DIR_PATH.isCallbackEnabled = true;
+          node.pkg39.INDEX.isCallbackEnabled = true;
+        })();
+      }
     }
   },
 });

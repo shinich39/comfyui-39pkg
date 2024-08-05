@@ -9,8 +9,8 @@ import {
   getLoaderId,
   getPreviousId,
   getRandomSeed,
+  renderCanvas,
 } from "./pkg39-utils.js";
-import * as util from "./util.min.js";
 
 function initCommandNode() {
   const self = this;
@@ -45,6 +45,7 @@ function initCommandNode() {
   text += `\n// MASK_PATH => String|null: Path of loaded mask.`;
   text += `\n// MASK_NAME => String|null: Filename of loaded mask.`;
   text += `\n// SEED => Number: Generated random seed for current queue.`;
+  text += `\n// STATE => Object: Store values and prevent refresh before image changed by user.`;
   text += `\n// YEAR => Number`;
   text += `\n// MONTH => Number`;
   text += `\n// DAY => Number`;
@@ -54,7 +55,8 @@ function initCommandNode() {
   text += `\n// countImages => Number: Number of images.`;
   text += `\n// countQueues => Number: Number of queues.`;
   text += `\n// countLoops => Number: Number of loops.`;
-  text += `\n// error => Function: A callback function when an error occurred in command node.`;
+  text += `\n// onEnd(images) => Function: A callback function after image generation.`;
+  text += `\n// onError(err) => Function: A callback function when an error occurred in command node.`;
   text += `\n\n// ### Global methods`;
   text += `\n// flow(index): Change to search area as specific flow.`;
   text += `\n// find("TITLE"|"TYPE") => NodeArray: Search for nodes in selected flow.`;
@@ -75,6 +77,8 @@ function initCommandNode() {
   text += `\n// next(): Load next image.`;
   text += `\n// loop(): Enable auto queue mode and start generation.`;
   text += `\n// stop(): Disable auto queue mode and stop current generation.`;
+  text += `\n// loadDir(dirPath) => Promise: Change dir_path value and load images in directory.`;
+  text += `\n// loadFile(filePath) => Promise: Load image by file path.`;
   text += `\n\n// ### Node variables`;
   text += `\n// node.isPkg39 => Boolean`;
   text += `\n// node.isEnd => Boolean: The node has been placed ending point.`;
@@ -111,6 +115,9 @@ function initCommandNode() {
   w.prevValue = text;
   w.isChanged = false;
   w.callback = (newValue) => {
+    if (app.configuringGraph) {
+      return;
+    }
     if (!w.isChanged) {
       if (w.prevValue !== newValue) {
         w.isChanged = true;
@@ -125,7 +132,12 @@ function initCommandNode() {
     w.prevValue = w.value;
     for (const node of app.graph._nodes) {
       if (isLoadImageNode(node)) {
-        await node.pkg39.renderImage();
+        node.pkg39.resetCounter();
+        node.pkg39.clearImage();
+        node.pkg39.selectImage();
+        node.pkg39.renderImage();
+        await node.pkg39.renderWorkflow();
+        renderCanvas();
       }
     }
   }

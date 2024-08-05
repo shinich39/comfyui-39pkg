@@ -158,6 +158,28 @@ function selectNode(node) {
   app.canvas.selectNode(node);
 }
 
+function parseExecuteResponse(obj) {
+  let filePath = "ComfyUI/";
+  let dirPath = "ComfyUI/";
+  let filename = obj.filename;
+  if (obj.type && obj.type !== "") {
+    filePath += obj.type + "/";
+    dirPath += obj.type + "/";
+  }
+  if (obj.subfolder && obj.subfolder !== "") {
+    filePath += obj.subfolder + "/";
+    dirPath += obj.subfolder + "/";
+  }
+
+  filePath += filename;
+  
+  return {
+    filePath,
+    dirPath,
+    filename,
+  }
+}
+
 export {
   isLoadImageNode,
   isCommandNode,
@@ -178,4 +200,5 @@ export {
   playSound,
   loopSound,
   selectNode,
+  parseExecuteResponse,
 }

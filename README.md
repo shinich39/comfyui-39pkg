@@ -106,13 +106,6 @@ newSampler.setValue("denoise", DENOISE);
 newUpscaler.connectInput("samples", vaeEncode);
 
 sampler.remove();
-
-onEnd = () => {
-  if (countLoops > 0) {
-    stop();
-    sound();
-  }
-}
 ```
 
 - Full code of inpaint loop  

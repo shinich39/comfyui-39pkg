@@ -1545,8 +1545,7 @@ function setMaskWidgetEvents(widget) {
       // this.brush.className = "load-image-in-seq-mask-editor-brush";
       document.body.appendChild(this.brush);
     }
-    // canvas scale
-    const scale = app.canvas.ds.scale;
+    const canvasScale = app.canvas.ds.scale;
 
     this.brush.style.backgroundColor = "rgba(0,0,0,0.2)";
     this.brush.style.boxShadow = "0 0 0 1px white";
@@ -1556,10 +1555,10 @@ function setMaskWidgetEvents(widget) {
     this.brush.style.position = "absolute";
     this.brush.style.zIndex = 8889;
     this.brush.style.pointerEvents = "none";
-    this.brush.style.width = this.brushSize * 2 * this.zoomRatio * scale + "px";
-    this.brush.style.height = this.brushSize * 2 * this.zoomRatio * scale + "px";
-    this.brush.style.left = (this.cursorX - this.brushSize * this.zoomRatio * scale) + "px";
-    this.brush.style.top = (this.cursorY - this.brushSize * this.zoomRatio * scale) + "px";
+    this.brush.style.width = this.brushSize * 2 * this.zoomRatio * canvasScale + "px";
+    this.brush.style.height = this.brushSize * 2 * this.zoomRatio * canvasScale + "px";
+    this.brush.style.left = (this.cursorX - this.brushSize * this.zoomRatio * canvasScale) + "px";
+    this.brush.style.top = (this.cursorY - this.brushSize * this.zoomRatio * canvasScale) + "px";
   }
 
   function hideBrush() {
@@ -1572,14 +1571,14 @@ function setMaskWidgetEvents(widget) {
   function handleWheelEvent(self, event) {
     event.preventDefault();
 
-    // canvas scale
-    const scale = app.canvas.ds.scale;
+    const canvasScale = app.canvas.ds.scale;
+    const imageScale = this.originalCanvas.offsetWidth / this.originalCanvas.width;
 
     // adjust brush size
     if(event.deltaY < 0)
-      self.brushSize = Math.min(self.brushSize+(10 / scale), 1000 / scale);
+      self.brushSize = Math.min(self.brushSize+(10 / canvasScale / imageScale), 100 / canvasScale / imageScale);
     else
-      self.brushSize = Math.max(self.brushSize-(10 / scale), 1);
+      self.brushSize = Math.max(self.brushSize-(10 / canvasScale / imageScale), 1);
 
     self.showBrush();
   }
@@ -1594,7 +1593,7 @@ function setMaskWidgetEvents(widget) {
     if(event.ctrlKey || event.shiftKey) {
       return;
     }
-
+    
     event.preventDefault();
 
     this.cursorX = event.pageX;

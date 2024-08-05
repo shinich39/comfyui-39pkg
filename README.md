@@ -86,7 +86,7 @@ vaeEncode.connectInput("pixels", MAIN);
 vaeEncode.connectInput("vae", ckpt);
 
 saveImage.connectInput("images", vaeDecode);
-saveImage.setValue("filename_prefix", "upscale");
+saveImage.setValue("filename_prefix", IMAGE_NAME);
 
 // new sampler inherit values and connections from sampler
 var [newUpscaler, newSampler] = sampler.hires(SCALE_BY);
@@ -131,7 +131,7 @@ setLatentNoiseMask.connectInput("mask", MAIN);
 setLatentNoiseMask.connectInput("samples", vaeEncode);
 
 saveImage.connectInput("images", vaeDecode);
-saveImage.setValue("filename_prefix", "inpaint");
+saveImage.setValue("filename_prefix", IMAGE_NAME);
 
 sampler.connectInput("model", ckpt);
 sampler.connectInput("latent", setLatentNoiseMask);

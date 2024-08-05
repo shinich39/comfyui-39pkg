@@ -132,7 +132,8 @@ function initCommandNode() {
     w.prevValue = w.value;
     for (const node of app.graph._nodes) {
       if (isLoadImageNode(node)) {
-        node.pkg39.resetCounter();
+        // node.pkg39.resetCounter();
+        // node.pkg39.updateIndex(node.pkg39.getIndex());
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();

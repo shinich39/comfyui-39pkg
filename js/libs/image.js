@@ -231,13 +231,12 @@ function initLoadImageNode() {
       }
     }).bind(this);
 
-    this.pkg39.getIndex = (function() {
+    this.pkg39.getIndex = (function(idx) {
       try {
         if (!this.pkg39.isInitialized) {
           throw new Error("pkg39 has not been initialized.");
         }
-    
-        let i = this.pkg39.INDEX.value;
+        let i = typeof idx === "number" ? idx : this.pkg39.INDEX.value;
         const min = 0;
         const max = this.pkg39.loadedImages?.length || 0;
         if (i < min) {
@@ -245,11 +244,10 @@ function initLoadImageNode() {
         } else if (max && i >= max) {
           i = i % max;
         }
-    
         return i;
       } catch(err) {
         console.error(err);
-        return -1;
+        return 0;
       }
     }).bind(this);
 
@@ -345,7 +343,6 @@ function initLoadImageNode() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
-
       if (!this.pkg39.selectedImage) {
         return;
       }
@@ -1396,11 +1393,12 @@ try {
         }
         this.pkg39.INDEX.isCallbackEnabled = false; // prevent callback
 
+        let isFixed = typeof idx === "number";
         let images = this.pkg39.loadedImages;
         let m = this.pkg39.MODE.value;
 
-        if (typeof idx !== "number") {
-          idx = this.pkg39.INDEX.value;
+        if (!isFixed) {
+          idx = this.pkg39.getIndex();
           if (m === "increment") {
             idx += 1;
           } else if (m === "decrement") {
@@ -1409,20 +1407,19 @@ try {
             idx = Math.floor(util.random(0, images.length));
           }
         }
-    
-        if (!images || images.length < 1) {
-          idx = -1;
-        }
 
-        this.pkg39.INDEX.value = idx;
+        let clampedIdx = this.pkg39.getIndex(idx);
+
+        this.pkg39.INDEX.value = clampedIdx;
 
         // increase counts
-        this.pkg39.countQueues += 1;
-        let n = this.pkg39.getIndex();
-        if (m === "increment" && n < idx) {
-          this.pkg39.countLoops += 1;
-        } else if (m === "decrement" && n > idx) {
-          this.pkg39.countLoops += 1;
+        if (!isFixed) {
+          this.pkg39.countQueues += 1;
+          if (m === "increment" && clampedIdx < idx) {
+            this.pkg39.countLoops += 1;
+          } else if (m === "decrement" && clampedIdx > idx) {
+            this.pkg39.countLoops += 1;
+          }
         }
 
         this.pkg39.INDEX.isCallbackEnabled = true;
@@ -1506,6 +1503,7 @@ try {
         return;
       }
       self.pkg39.resetCounter();
+      self.pkg39.updateIndex(self.pkg39.getIndex());
       self.pkg39.clearImage();
       self.pkg39.selectImage();
       self.pkg39.renderImage();
@@ -1543,6 +1541,7 @@ async function promptQueuedHandler() {
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
         isChanged = true;
+        node.pkg39.updateIndex(node.pkg39.getIndex());
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
@@ -2047,6 +2046,7 @@ async function keyDownEvent(e) {
     e.stopPropagation();
     this.pkg39.resetCounter();
     await this.pkg39.loadImages();
+    this.pkg39.updateIndex(this.pkg39.getIndex());
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
@@ -2138,6 +2138,7 @@ app.registerExtension({
       if (isLoadImageNode(node)) {
         node.pkg39.resetCounter();
         await node.pkg39.loadImages();
+        // node.pkg39.updateIndex(node.pkg39.getIndex());
         // node.pkg39.clearImage(); // prevent refresh on intialization
         node.pkg39.selectImage();
         node.pkg39.renderImage();
@@ -2158,6 +2159,7 @@ app.registerExtension({
         ;(async () => {
           node.pkg39.resetCounter();
           await node.pkg39.loadImages();
+          // node.pkg39.updateIndex(node.pkg39.getIndex());
           node.pkg39.clearImage();
           node.pkg39.selectImage();
           node.pkg39.renderImage();

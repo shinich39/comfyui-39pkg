@@ -65,6 +65,7 @@ You can test your code to change command node.
 The examples use only Comfy Core nodes but you can use installed custom nodes.  
 
 - Full code of Hi-Res fix loop  
+
 Set mode to "increment" in Load image node.  
 Set auto queue mode to "instant"  
 
@@ -105,9 +106,20 @@ newSampler.setValue("denoise", DENOISE);
 newUpscaler.connectInput("samples", vaeEncode);
 
 sampler.remove();
+
+if (countLoops > 0) {
+  stop();
+}
+
+onEnd = () => {
+  if (countLoops > 0) {
+    sound();
+  }
+}
 ```
 
 - Full code of inpaint loop  
+
 Set mode to "fixed" in Load image node.  
 
 ```js
@@ -184,7 +196,9 @@ vaeEncode.connectOutput("LATENT", findOne("KSampler"));
 ```js
 // case 1
 remove("PreviewImage");
+```
 
+```js
 // case 2
 find("PreviewImage").forEach(e => {
   if (e.isEnd) { e.remove() }
@@ -195,7 +209,9 @@ find("PreviewImage").forEach(e => {
 ```js
 // case 1
 disable("PreviewImage");
+```
 
+```js
 // case 2
 find("PreviewImage").forEach(e => {
   if (e.isEnd) { e.disable() }
@@ -213,8 +229,10 @@ find("KSampler").forEach(e => {
 ```js
 // case 1
 var ckpt_name = "CHECKPOINT.safetensor";
-find("Load Checkpoint").forEach(e => e.setValues("ckpt_name", ckpt_name));
+find("Load Checkpoint").forEach(e => e.setValue("ckpt_name", ckpt_name));
+```
 
+```js
 // case 2
 var newCkpt = findOneById(1); // Load Checkpoint
 var oldCkpt = findOne("Load Checkpoint");

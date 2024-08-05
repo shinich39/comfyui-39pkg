@@ -54,7 +54,6 @@ In auto queue mode, ignore ComfyUI errors. (Link error, ...)
 Keybindings\(after select node\):  
 - F5 or Ctrl + r: Reload images in directory.
 - Arrows: Next, Previous image.
-- Enter: Start generation.
 
 ### Command node  
 Commnad has default guide lines.  

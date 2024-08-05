@@ -1855,10 +1855,6 @@ async function keyDownEvent(e) {
     this.pkg39.INDEX.value = this.pkg39.INDEX.value + 1;
     await this.pkg39.renderImage()
     selectNode(this);
-  } else if (key === "Enter") {
-    e.preventDefault();
-    e.stopPropagation();
-    startGeneration();
   } else if (
     (key === "r" && (ctrlKey || metaKey) ||
     key === "F5"

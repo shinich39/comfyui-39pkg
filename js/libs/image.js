@@ -1200,7 +1200,7 @@ function initLoadImageNode() {
           const cancel = () => { cancelGeneration(); }
           const next = () => { loadNextImage(); }
           const loop = () => { setAutoQueue(); startGeneration(); }
-          const stop = () => { unsetAutoQueue(); cancelGeneration(); }
+          const stop = () => { unsetAutoQueue(); } // cancelGeneration(); 
           let error = (err) => { console.error(err); };
           let __command__ = getCommandValue();
           __command__ = `

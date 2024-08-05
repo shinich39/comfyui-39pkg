@@ -35,7 +35,7 @@ async function saveImage(filePath) {
   return true;
 }
 
-async function sendTopkg39() {
+async function sendToPkg39() {
   if (this.imgs) {
     // If this node has images then we add an open in new tab item
     let img;
@@ -70,7 +70,7 @@ app.registerExtension({
           {
             content: MENU_NAME,
             callback: () => {
-              sendTopkg39.apply(this);
+              sendToPkg39.apply(this);
             },
           },
         );

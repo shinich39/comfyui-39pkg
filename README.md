@@ -39,9 +39,8 @@ Create a new output when connect input.
 Shuffle the connections after starting the queue.  
 
 ### Keybinding node  
-You can enable keybinding in textarea.  
 Create a Keybinding node.  
-When keybinding node enabled and you type opening brackets in textarea, bracket has closed and cursor move to inside of brackets.  
+When bracket keybinding enabled and you type opening bracket in textarea, bracket has closed and cursor move to inside of brackets.  
 If you selected text range, brackets enclose the text range.  
 
 ### Load image node  

@@ -117,7 +117,7 @@ app.registerExtension({
               histories.push({
                 oldText: prevText,
                 newText: oldText,
-                brackets: brackets,
+                // brackets: brackets,
                 oldRange: getPrevRange(),
                 newRange: oldRange,
               });
@@ -126,7 +126,7 @@ app.registerExtension({
             histories.push({
               oldText: oldText,
               newText: newText,
-              brackets: brackets,
+              // brackets: brackets,
               oldRange: oldRange,
               newRange: newRange,
             });

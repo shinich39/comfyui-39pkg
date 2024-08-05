@@ -172,14 +172,16 @@ class LoadImage():
   
   CATEGORY = "pkg39"
   FUNCTION = "exec"
-  RETURN_TYPES = ("IMAGE", "MASK", "STRING",)
-  RETURN_NAMES = ("IMAGE", "MASK", "FILENAME",)
+  RETURN_TYPES = ("IMAGE", "MASK",)
+  RETURN_NAMES = ("IMAGE", "MASK",)
 
   def exec(self, dir_path, index, mode, filename, **kwargs):
-    image_list = get_images_with_metadata(dir_path)
-    image_path = image_list[index]["image_path"]
-    mask_path = image_list[index]["mask_path"]
-    image = Image.open(mask_path if mask_path else image_path)
+    image_name = filename + ".png"
+    image_path = os.path.join(dir_path, image_name)
+    mask_name = "." + image_name
+    mask_path = os.path.join(dir_path, mask_name)
+    is_mask_exists = os.path.exists(mask_path)
+    image = Image.open(mask_path if is_mask_exists else image_path)
     img = ImageOps.exif_transpose(image)
     image = img.convert("RGB")
     image = np.array(image).astype(np.float32) / 255.0

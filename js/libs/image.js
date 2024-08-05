@@ -277,6 +277,7 @@ function initLoadImageNode() {
       this.pkg39.selectedImage = this.pkg39.loadedImages[i];
       if (!this.pkg39.selectedImage) {
         this.pkg39.INDEX.value = -1;
+        this.pkg39.FILENAME.prevValue = "NO IMAGE";
         this.pkg39.FILENAME.value = "NO IMAGE";
         throw new Error(`No image in ${this.pkg39.DIR_PATH.value}`);
       }
@@ -284,6 +285,7 @@ function initLoadImageNode() {
       const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
       this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
       this.pkg39.MASK.maskImg.src = getImageURL(maskPath || imagePath);
+      this.pkg39.FILENAME.prevValue = imageName;
       this.pkg39.FILENAME.value = imageName;
       this.pkg39.INDEX.value = i;
 
@@ -1363,7 +1365,6 @@ try {
     const dpWidget = this.pkg39.DIR_PATH;
     const idxWidget = this.pkg39.INDEX;
     const fnWidget = this.pkg39.FILENAME;
-    const indexWidget = this.pkg39.INDEX;
     const modeWidget = this.pkg39.MODE;
     const maskWidget = this.pkg39.MASK;
 
@@ -1380,6 +1381,13 @@ try {
         this.prevValue = currValue;
         idxWidget.value = 0;
         self.pkg39.updateDirPath();
+      }
+    }
+
+    fnWidget.callback = function(currValue) {
+      if (this.prevValue !== currValue) {
+        alert("You can not change filename.");
+        this.value = this.prevValue;
       }
     }
 

@@ -1152,12 +1152,22 @@ function initLoadImageNode() {
         try {
           const MAIN = returnNodeObject(self);
           const DIR_PATH = selectedImage.dirPath;
-          const IMAGE_PATH = selectedImage.imagePath;
-          const MASK_PATH = selectedImage.maskPath;
-          const IMAGE_NAME = selectedImage.imageName;
-          const MASK_NAME = selectedImage.maskName;
           const INDEX = selectedIndex;
+          const IMAGE_PATH = selectedImage.imagePath;
+          const IMAGE_NAME = selectedImage.imageName;
+          const MASK_PATH = selectedImage.maskPath;
+          const MASK_NAME = selectedImage.maskName;
+
           const SEED = getRandomSeed();
+
+          const DATE = new Date();
+          const YEAR = DATE.getFullYear();
+          const MONTH = DATE.getMonth() + 1;
+          const DAY = DATE.getDay();
+          const HOURS = DATE.getHours();
+          const MINUTES = DATE.getMinutes();
+          const SECONDS = DATE.getSeconds();
+
           // const IS_INHERITED = prevConnectedLinks.length > 0;
           const countImages = self.pkg39.loadedImages.length;
           const countQueues = self.pkg39.countQueues;

@@ -26,14 +26,23 @@ function isSelected(el) {
   return selectedElement && selectedElement.isSameNode(el);
 }
 
+function getPrevValue() {
+  if (histories.length > 0) {
+    return histories[histories.length - 1].newText;
+  }
+}
+
+function getPrevRange() {
+  if (histories.length > 0) {
+    return histories[histories.length - 1].newRange;
+  }
+}
+
 function getHistory(el) {
   if (!selectedElement || !el.isSameNode(selectedElement)) {
     return;
   }
-  if (
-    histories.length > 0 && 
-    histories[histories.length - 1].newText === el.value
-  ) {
+  if (getPrevValue() === el.value) {
     return histories.pop();
   }
 }
@@ -103,8 +112,18 @@ app.registerExtension({
               histories = [];
             }
 
+            const prevText = getPrevValue();
+            if (prevText && prevText !== oldText) {
+              histories.push({
+                oldText: prevText,
+                newText: oldText,
+                brackets: brackets,
+                oldRange: getPrevRange(),
+                newRange: oldRange,
+              });
+            }
+
             histories.push({
-              // element: e.target,
               oldText: oldText,
               newText: newText,
               brackets: brackets,

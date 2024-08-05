@@ -20,9 +20,9 @@ Using this package requires a little understanding of javascript syntax.
 ## Nodes
 
 - Random
+- Keybinding
 - Load image
 - Command
-- Keybinding
 
 ## Usage
 

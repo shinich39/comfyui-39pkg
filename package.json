@@ -1,7 +1,7 @@
 {
   "name": "comfyui-pkg39",
   "version": "1.0.0",
-  "description": "This package has created for generate image from generated image and embedded workflow.",
+  "description": "Automation for generating image from image.",
   "type": "module",
   "main": "index.js",
   "directories": {

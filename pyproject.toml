@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-pkg39"
-description = "This package has created for generate image from generated image and embedded workflow."
+description = "Automation for generating image from image."
 version = "1.0.0"
 license = { file = "LICENSE" }
 

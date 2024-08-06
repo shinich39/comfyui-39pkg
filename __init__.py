@@ -3,7 +3,7 @@
 @title: pkg39
 @nickname: pkg39
 @version: 1.0.0
-@description: This package has created for generate image from generated image and embedded workflow.
+@description: Automation for generating image from image.
 """
 
 from .py.index import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS

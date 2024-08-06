@@ -81,6 +81,7 @@ function initLoadImageNode() {
             fontSize: "0.8rem",
             letterSpacing: 0,
             pointerEvents: "none",
+            zIndex: 999,
           });
           const originalCanvas = document.createElement("canvas");
           const originalCtx = originalCanvas.getContext("2d", {willReadFrequently: true});

@@ -60,8 +60,6 @@ function getKey({ key, ctrlKey, metaKey, shiftKey }) {
     str += "Shift+";
   }
   str += key;
-
-  console.log(str)
   return str;
 }
 
@@ -196,9 +194,6 @@ app.registerExtension({
             }
           }
         });
-
-        // clear histories
-        // element.addEventListener("blur", (e) => { histories = []; });
       }
 
       return r;

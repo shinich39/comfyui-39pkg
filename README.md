@@ -97,15 +97,13 @@ saveImage.setValue("filename_prefix", IMAGE_NAME);
 
 // new sampler inherit values and connections from sampler
 var [newUpscaler, newSampler] = sampler.hires(SCALE_BY);
+newUpscaler.connectInput("samples", vaeEncode);
 newSampler.setValue("seed", SEED); // random seed
 newSampler.setValue("steps", STEPS);
 newSampler.setValue("cfg", CFG);
 newSampler.setValue("sampler_name", SAMPLER_NAME);
 newSampler.setValue("scheduler", SCHEDULER);
 newSampler.setValue("denoise", DENOISE);
-
-newUpscaler.connectInput("samples", vaeEncode);
-
 sampler.remove();
 ```
 
@@ -127,10 +125,14 @@ remove("SaveImage");
 remove("LatentUpscale");
 remove("VAEEncode");
 remove("SetLatentNoiseMask");
+remove("InvertMask");
+remove("ImageCompositeMasked");
 removeOut();
 
 var vaeEncode = create("VAEEncode");
 var setLatentNoiseMask = create("SetLatentNoiseMask");
+var invertMask = create("InvertMask");
+var imageComposite = create("ImageCompositeMasked");
 var saveImage = create("SaveImage");
 var ckpt = findOne("Load Checkpoint");
 var vaeDecode = findOneLast("VAEDecode");
@@ -142,10 +144,6 @@ vaeEncode.connectInput("vae", ckpt);
 setLatentNoiseMask.connectInput("mask", MAIN);
 setLatentNoiseMask.connectInput("samples", vaeEncode);
 
-saveImage.connectInput("images", vaeDecode);
-saveImage.setValue("output_path", "");
-saveImage.setValue("filename_prefix", IMAGE_NAME.split("_")[0]);
-
 sampler.connectInput("model", ckpt);
 sampler.connectInput("latent", setLatentNoiseMask);
 sampler.setValue("seed", SEED); // random seed
@@ -154,6 +152,15 @@ sampler.setValue("cfg", CFG);
 // sampler.setValue("sampler_name", SAMPLER_NAME);
 sampler.setValue("scheduler", SCHEDULER);
 sampler.setValue("denoise", DENOISE);
+
+invertMask.connectInput("mask", MAIN);
+
+imageComposite.connectInput("mask", invertMask);
+imageComposite.connectInput("source", MAIN);
+imageComposite.connectInput("destination", vaeDecode);
+
+saveImage.connectInput("images", imageComposite);
+saveImage.setValue("filename_prefix", IMAGE_NAME.split("_")[0]);
 
 // load inpainted image
 onEnd = async (images) => await loadFile(images);

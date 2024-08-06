@@ -15,7 +15,7 @@ const BRACKETS = {
   "<": ["<",">"],
 };
 
-const SHORT_CUTS = {
+const SHORTCUTS = {
   "Tab": "  ",
 }
 
@@ -51,7 +51,7 @@ function getHistory(el) {
   }
 }
 
-function getKey({ key, ctrlKey, metaKey, shiftKey }) {
+function getShortcutKey({ key, ctrlKey, metaKey, shiftKey }) {
   let str = "";
   if (ctrlKey || metaKey) {
     str += "Ctrl+";
@@ -63,14 +63,13 @@ function getKey({ key, ctrlKey, metaKey, shiftKey }) {
   return str;
 }
 
-function isBracket(e) {
-  const key = getKey(e);
+function isBracket({ key }) {
   return Object.keys(BRACKETS).indexOf(key) > -1;
 }
 
-function isShortCut(e) {
-  const key = getKey(e);
-  return Object.keys(SHORT_CUTS).indexOf(key) > -1;
+function isShortcut(e) {
+  const key = getShortcutKey(e);
+  return Object.keys(SHORTCUTS).indexOf(key) > -1;
 }
 
 function isEnabled({ key }) {
@@ -154,9 +153,9 @@ app.registerExtension({
               oldRange: oldRange,
               newRange: newRange,
             });
-          } else if (isShortCut(e) && isEnabled(e)) {
+          } else if (isShortcut(e) && isEnabled(e)) {
             e.preventDefault();
-            let part = SHORT_CUTS[key];
+            let part = SHORTCUTS[key];
             let oldRange = getSelectionRange(e.target);
             let oldText = e.target.value;
             let newText = oldText.substring(0, oldRange[0]) + 

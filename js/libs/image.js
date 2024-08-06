@@ -80,6 +80,7 @@ function initLoadImageNode() {
             fontFamily: "Verdana, Arial, Helvetica, sans-serif",
             fontSize: "0.8rem",
             letterSpacing: 0,
+            pointerEvents: "none",
           });
           const originalCanvas = document.createElement("canvas");
           const originalCtx = originalCanvas.getContext("2d", {willReadFrequently: true});
@@ -87,6 +88,7 @@ function initLoadImageNode() {
             position: "absolute",
             maxWidth: "100%",
             maxHeight: "100%",
+            pointerEvents: "auto",
           });
           const maskCanvas = document.createElement("canvas");
           const maskCtx = maskCanvas.getContext("2d", {willReadFrequently: true});
@@ -96,6 +98,7 @@ function initLoadImageNode() {
             opacity: 0.7,
             maxWidth: "100%",
             maxHeight: "100%",
+            pointerEvents: "auto",
           });
 
           container.appendChild(originalCanvas);

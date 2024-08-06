@@ -168,7 +168,7 @@ saveImage.connectInput("images", imageComposite);
 saveImage.setValue("filename_prefix", IMAGE_NAME.split("_")[0]);
 
 // load inpainted image
-onEnd = async (images) => await loadFile(images);
+onEnd = async (images) => await loadFile(images[0]);
 ```
 
 - Connect LATENT output of "Load image" node in each image workflow

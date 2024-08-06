@@ -1463,7 +1463,7 @@ try {
 
         let clampedIdx = this.pkg39.getIndex(idx);
 
-        this.pkg39.INDEX.value = clampedIdx;
+        this.pkg39.INDEX.value = Math.round(clampedIdx);
 
         // increase counts
         if (!isFixed) {
@@ -1549,18 +1549,24 @@ try {
     }
 
     idxWidget.isCallbackEnabled = false;
+    idxWidget.timer = null;
     idxWidget.callback = async function(v) {
       if (!this.isCallbackEnabled) {
         return;
       }
-      self.pkg39.resetCounter();
-      self.pkg39.updateIndex(self.pkg39.getIndex());
-      self.pkg39.clearImage();
-      self.pkg39.selectImage();
-      self.pkg39.renderImage();
-      await self.pkg39.renderWorkflow();
-      renderCanvas();
-      selectNode(self);
+      if (this.timer) {
+        clearTimeout(this.timer);
+      }
+      this.timer = setTimeout(async () => {
+        self.pkg39.resetCounter();
+        self.pkg39.updateIndex(self.pkg39.getIndex());
+        self.pkg39.clearImage();
+        self.pkg39.selectImage();
+        self.pkg39.renderImage();
+        await self.pkg39.renderWorkflow();
+        renderCanvas();
+        selectNode(self);
+      }, 256);
     }
   } catch(err) {
     console.error(err);

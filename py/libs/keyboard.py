@@ -1,4 +1,4 @@
-class Keybinding():
+class BindKey():
   def __init__(self):
     pass
 
@@ -10,6 +10,7 @@ class Keybinding():
         "{": ("BOOLEAN", {"default": False}),
         "[": ("BOOLEAN", {"default": False}),
         "<": ("BOOLEAN", {"default": False}),
+        "Tab": ("BOOLEAN", {"default": True}),
       },
     }
   

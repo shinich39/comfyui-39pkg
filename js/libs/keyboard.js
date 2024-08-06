@@ -15,6 +15,10 @@ const BRACKETS = {
   "<": ["<",">"],
 };
 
+const SHORT_CUTS = {
+  "Tab": "  ",
+}
+
 function getSelectionRange(el) {
   return [
     el.selectionStart,
@@ -47,12 +51,33 @@ function getHistory(el) {
   }
 }
 
-function isEnabled(key) {
-  if (Object.keys(BRACKETS).indexOf(key) === -1) {
-    return false;
+function getKey({ key, ctrlKey, metaKey, shiftKey }) {
+  let str = "";
+  if (ctrlKey || metaKey) {
+    str += "Ctrl+";
   }
+  if (shiftKey) {
+    str += "Shift+";
+  }
+  str += key;
+
+  console.log(str)
+  return str;
+}
+
+function isBracket(e) {
+  const key = getKey(e);
+  return Object.keys(BRACKETS).indexOf(key) > -1;
+}
+
+function isShortCut(e) {
+  const key = getKey(e);
+  return Object.keys(SHORT_CUTS).indexOf(key) > -1;
+}
+
+function isEnabled({ key }) {
   for (const node of app.graph._nodes) {
-    if (node.comfyClass === "Keybinding39") {
+    if (node.comfyClass === "BindKey39") {
       if (!node.widgets) {
         continue;
       }
@@ -66,13 +91,13 @@ function isEnabled(key) {
 }
 
 app.registerExtension({
-	name: "shinich39.pkg39.keybinding",
+	name: "shinich39.pkg39.keyboard",
 	init() {
     if (!isSelectionEnabled) {
       return;
     }
 
-    // textarea keybinding
+    // textarea
     const STRING = ComfyWidgets.STRING;
     ComfyWidgets.STRING = function (node, inputName, inputData) {
       const r = STRING.apply(this, arguments);
@@ -89,8 +114,8 @@ app.registerExtension({
         }
 
         element.addEventListener("keydown", function(e) {
-          const { key, ctrlKey } = e;
-          if (isEnabled(key)) {
+          const { key, ctrlKey, metaKey } = e;
+          if (isBracket(e) && isEnabled(e)) {
             e.preventDefault();
             let brackets = BRACKETS[key];
             let oldRange = getSelectionRange(e.target);
@@ -98,10 +123,13 @@ app.registerExtension({
             let oldPart = oldText.substring(oldRange[0], oldRange[1]);
             let newPart = `${brackets[0]}${oldPart}${brackets[1]}`;
             let newText = oldText.substring(0, oldRange[0]) + 
-              newPart +
-              oldText.substring(oldRange[1]);
+                          newPart +
+                          oldText.substring(oldRange[1]);
 
-            let newRange = [oldRange[0] + 1, oldRange[1] + 1];
+            let newRange = [
+              oldRange[0] + brackets[0].length,
+              oldRange[1] + brackets[0].length
+            ];
 
             e.target.value = newText;
             e.target.focus();
@@ -117,7 +145,6 @@ app.registerExtension({
               histories.push({
                 oldText: prevText,
                 newText: oldText,
-                // brackets: brackets,
                 oldRange: getPrevRange(),
                 newRange: oldRange,
               });
@@ -126,11 +153,39 @@ app.registerExtension({
             histories.push({
               oldText: oldText,
               newText: newText,
-              // brackets: brackets,
               oldRange: oldRange,
               newRange: newRange,
             });
-          } else if (key === "z" && ctrlKey) {
+          } else if (isShortCut(e) && isEnabled(e)) {
+            e.preventDefault();
+            let part = SHORT_CUTS[key];
+            let oldRange = getSelectionRange(e.target);
+            let oldText = e.target.value;
+            let newText = oldText.substring(0, oldRange[0]) + 
+                          part +
+                          oldText.substring(oldRange[1]);
+
+            let newRange = [
+              oldRange[0] + part.length,
+              oldRange[0] + part.length
+            ];
+
+            e.target.value = newText;
+            e.target.focus();
+            e.target.setSelectionRange(newRange[0], newRange[1]);
+
+            if (!isSelected(e.target)) {
+              selectedElement = e.target;
+              histories = [];
+            }
+
+            histories.push({
+              oldText: oldText,
+              newText: newText,
+              oldRange: oldRange,
+              newRange: newRange,
+            });
+          } else if (key === "z" && (ctrlKey || metaKey)) {
             const history = getHistory(e.target);
             if (history) {
               e.preventDefault();

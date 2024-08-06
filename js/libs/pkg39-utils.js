@@ -123,7 +123,6 @@ function renderCanvas() {
   app.canvas.draw(true, true);
 }
 
-
 function isSoundPlayed() {
   return !AUDIO_ELEMENT.paused;
 }
@@ -172,7 +171,7 @@ function parseExecuteResponse(obj) {
   }
 
   filePath += filename;
-  
+
   return {
     filePath,
     dirPath,

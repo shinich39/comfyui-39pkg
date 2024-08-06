@@ -328,7 +328,6 @@ function initLoadImageNode() {
       if (!this.pkg39.selectedImage) {
         return;
       }
-
       try {
         const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
         this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
@@ -346,7 +345,6 @@ function initLoadImageNode() {
       if (!this.pkg39.selectedImage) {
         return;
       }
-
       try {
         this.pkg39.loadWorkflow();
       } catch(err) {
@@ -1470,12 +1468,10 @@ try {
     dpWidget.isCallbackEnabled = false;
     dpWidget.options.getMinHeight = () => 64;
     dpWidget.options.getMaxHeight = () => 64;
-    dpWidget.prevValue = dpWidget.value;
     dpWidget.callback = async function(currValue) {
       if (!this.isCallbackEnabled) {
         return;
       }
-      // fix update before initialize
       if (this.prevValue !== currValue) {
         this.prevValue = currValue;
         self.pkg39.resetCounter();
@@ -1541,7 +1537,6 @@ async function promptQueuedHandler() {
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
         isChanged = true;
-        node.pkg39.updateIndex(node.pkg39.getIndex());
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
@@ -2018,7 +2013,6 @@ function setMaskWidgetEvents(widget) {
 
 async function keyDownEvent(e) {
   const { key, ctrlKey, metaKey, shiftKey } = e;
-
   if (key === "ArrowLeft") {
     e.preventDefault();
     e.stopPropagation();
@@ -2139,14 +2133,18 @@ app.registerExtension({
         node.pkg39.resetCounter();
         await node.pkg39.loadImages();
         // node.pkg39.updateIndex(node.pkg39.getIndex());
-        // node.pkg39.clearImage(); // prevent refresh on intialization
+        node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
-        // await node.pkg39.renderWorkflow(); // prevent refresh on intialization
+        await node.pkg39.renderWorkflow();
         renderCanvas();
 
         node.pkg39.DIR_PATH.isCallbackEnabled = true;
         node.pkg39.INDEX.isCallbackEnabled = true;
+
+        // bug fix first run after refreshing
+        node.pkg39.DIR_PATH.prevValue = node.pkg39.DIR_PATH.value; 
+        node.pkg39.FILENAME.prevValue = node.pkg39.FILENAME.value;
       }
     }
 	},

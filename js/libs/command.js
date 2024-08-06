@@ -114,12 +114,12 @@ function initCommandNode() {
   w.value = text;
   w.prevValue = text;
   w.isChanged = false;
-  w.callback = (newValue) => {
+  w.callback = (currValue) => {
     if (app.configuringGraph) {
       return;
     }
     if (!w.isChanged) {
-      if (w.prevValue !== newValue) {
+      if (w.prevValue !== currValue) {
         w.isChanged = true;
         w.element.addEventListener("blur", updateHandler);
       }

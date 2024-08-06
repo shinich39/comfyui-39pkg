@@ -465,7 +465,6 @@ function initLoadImageNode() {
           loaderId: this.id,
           previousId: n.id,
           isEnabled: n.mode === 0,
-          isDisabled: n.mode === 4,
         }
         if (DEFAULT_NODE_COLORS) {
           n.color = DEFAULT_NODE_COLORS.yellow.color;
@@ -888,7 +887,11 @@ function initLoadImageNode() {
       }
 
       // type or title
-      const findNodesByName = function(str, reverse) {
+      const findNodesByName = function(str, options) {
+        if (typeof options !== "object") {
+          options = {};
+        }
+
         let nodes = [];
         let nodeIds = [];
 
@@ -908,16 +911,34 @@ function initLoadImageNode() {
           }
         }
 
-        // image.workflow
-        if (!reverse) {
-          for (let i = 0; i < nodeMap.length; i++) {
-            const n = nodeMap[i];
-            saveNode(n);
+        if (!options.global) {
+          if (!options.reverse) {
+            // default
+            for (let i = 0; i < nodeMap.length; i++) {
+              const n = nodeMap[i];
+              saveNode(n);
+            }
+          } else {
+            for (let i = nodeMap.length - 1; i >= 0; i--) {
+              const n = nodeMap[i];
+              saveNode(n);
+            }
           }
         } else {
-          for (let i = nodeMap.length - 1; i >= 0; i--) {
-            const n = nodeMap[i];
-            saveNode(n);
+          if (!options.reverse) {
+            for (let i = 0; i < nodeMaps.length; i++) {
+              for (let j = 0; j < nodeMaps[i].length; j++) {
+                const n = nodeMaps[i][j];
+                saveNode(n);
+              }
+            }
+          } else {
+            for (let i = 0; i < nodeMaps.length; i++) {
+              for (let j = nodeMaps[i].length - 1; j >= 0; j--) {
+                const n = nodeMaps[i][j];
+                saveNode(n);
+              }
+            }
           }
         }
 
@@ -932,11 +953,13 @@ function initLoadImageNode() {
         return nodes;
       }
 
-      const findNodesByNameFromLast = function(str) {
-        return findNodesByName(str, true);
-      }
-
-      const findNodeByName = function(str, reverse) {
+      const findNodeByName = function(str, options) {
+        if (typeof options !== "object") {
+          options = {
+            reverse: false,
+            global: false,
+          }
+        }
         
         function isValid(e) {
           return (e.title && e.title === str) ||
@@ -944,9 +967,8 @@ function initLoadImageNode() {
             (e.type && e.type.replace(/\s/g, "").toUpperCase() === str.replace(/\s/g, "").toUpperCase());
         }
 
-        // image.workflow
         let node;
-        if (!reverse) {
+        if (!options.reverse) {
           for (let i = 0; i < nodeMap.length; i++) {
             for (const n of nodeMap[i]) {
               if (isValid(n)) {
@@ -975,13 +997,22 @@ function initLoadImageNode() {
         return returnNodeObject(node);
       }
 
-      const findNodeByNameFromLast = function(str) {
-        return findNodeByName(str, true);
-      }
-
       const findNodeById = function(id) {
         const n = app.graph._nodes.find(e => e && e.id === id);
         return returnNodeObject(n);
+      }
+
+      const isExistsInNodeMap = function(node) {
+        for (const nodeMap of nodeMaps) {
+          for (const nodeList of nodeMap) {
+            for (const n of nodeList) {
+              if (n.id === node.id) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
       }
 
       const bypassNodes = function(nodes = [], b = true) {
@@ -1011,10 +1042,28 @@ function initLoadImageNode() {
         }
       }
 
+      const removeOutNodes = function() {
+        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
+          const n = app.graph._nodes[i];
+          if (getLoaderId(n) === self.id && !isExistsInNodeMap(n)) {
+            app.graph.remove(n);
+          }
+        }
+      }
+
       const bypassAllNodes = function(b = true) {
-        for (const node of app.graph._nodes) {
-          if (isPkg39Node(node)) {
-            node.mode = b ? 4 : 0;
+        for (const n of app.graph._nodes) {
+          if (getLoaderId(n) === self.id) {
+            n.mode = b ? 4 : 0;
+          }
+        }
+      }
+
+      const bypassOutNodes = function(b = true) {
+        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
+          const n = app.graph._nodes[i];
+          if (getLoaderId(n) === self.id && !isExistsInNodeMap(n)) {
+            n.mode = b ? 4 : 0;
           }
         }
       }
@@ -1031,7 +1080,6 @@ function initLoadImageNode() {
           loaderId: self.id,
           previousId: -1,
           isEnabled: true,
-          isDisabled: false,
         }
 
         if (DEFAULT_NODE_COLORS) {
@@ -1243,20 +1291,23 @@ function initLoadImageNode() {
           }
 
           // methods
-          const flow = changeNodeMap;
-          const find = findNodesByName;
-          const findLast = findNodesByNameFromLast;
-          const findOne = findNodeByName;
-          const findOneLast = findNodeByNameFromLast;
-          const findOneById = findNodeById;
-          const enable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), false)};
-          const enableAll = () => { bypassAllNodes(false) };
-          const disable = (name) => { bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true) };
-          const disableAll = bypassAllNodes;
-          const remove = (name) => { removeNodes(Array.isArray(name) ? name : findNodesByName(name)) };
-          const removeAll = removeAllNodes;
-          const create = createNode;
-          const sound = playSound;
+          const flow = (n) => { changeNodeMap(n); };
+          const find = (name) => findNodesByName(name);
+          const findLast = (name) => findNodesByName(name, { reverse: true });
+          const findOne = (name) => findNodeByName(name);
+          const findOneLast = (name) => findNodeByName(name, { reverse: true });
+          const findOneById = (id) => findNodeById(id);
+          const enable = (name) => bypassNodes(Array.isArray(name) ? name : findNodesByName(name), false);
+          const enableOut = () => bypassOutNodes(false);
+          const enableAll = () => bypassAllNodes(false);
+          const disable = (name) => bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true);
+          const disableOut = () => bypassOutNodes(true);
+          const disableAll = () => bypassAllNodes(true);
+          const remove = (name) => removeNodes(Array.isArray(name) ? name : findNodesByName(name));
+          const removeOut = () => removeOutNodes();
+          const removeAll = () => removeAllNodes();
+          const create = (name, values, options) => createNode(name, values, options);
+          const sound = () => playSound();
           const start = () => { startGeneration(); }
           const cancel = () => { cancelGeneration(); }
           const next = () => { loadNextImage(); }

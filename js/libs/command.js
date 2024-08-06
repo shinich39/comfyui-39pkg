@@ -66,10 +66,13 @@ function initCommandNode() {
   text += `\n// findOneById(id) => Node: Search for node in all flows.`;
   text += `\n// create("TYPE", values{}) => Node: Create a new node in virtual workflow.`;
   text += `\n// remove("TITLE"|"TYPE"|NodeArray)`;
+  text += `\n// removeOut(): Remove nodes outside the flow in virtual workflow.`;
   text += `\n// removeAll(): Remove all nodes in virtual workflow.`;
   text += `\n// enable("TITLE"|"TYPE"|NodeArray)`;
+  text += `\n// enableOut(): Enable nodes outside the flow in virtual workflow.`;
   text += `\n// enableAll(): Enable all nodes in virtual workflow.`;
   text += `\n// disable("TITLE"|"TYPE"|NodeArray)`;
+  text += `\n// disableOut(): Disable nodes outside the flow in virtual workflow.`;
   text += `\n// disableAll(): Disable all nodes in virtual workflow.`;
   text += `\n// sound(): Play the sound once.`;
   text += `\n// start(): Start generation.`;

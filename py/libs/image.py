@@ -163,7 +163,7 @@ class LoadImage():
   def INPUT_TYPES(cls):
     return {
       "required": {
-        "dir_path": ("STRING", {"default": CACHE_DIR, "multiline": True}),
+        "dir_path": ("STRING", {"default": os.path.relpath(CACHE_DIR), "multiline": True}),
         "index":  ("INT", {"default": 0, "min": -1, "step": 1}),
         "mode": (["fixed", "increment", "decrement", "randomize",],),
         "filename": ("STRING", {"default": "",}),

@@ -78,15 +78,16 @@ var SCHEDULER = "simple";
 var DENOISE = 0.5;
 var SCALE_BY = 2;
 
+remove("EmptyLatentImage");
+remove("PreviewImage");
+remove("SaveImage");
+removeOut();
+
 var vaeEncode = create("VAEEncode");
 var saveImage = create("SaveImage");
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOne("KSampler");
 var ckpt = findOne("Load Checkpoint");
-
-remove("EmptyLatentImage");
-remove("PreviewImage");
-remove("SaveImage");
 
 vaeEncode.connectInput("pixels", MAIN);
 vaeEncode.connectInput("vae", ckpt);
@@ -120,18 +121,20 @@ var SAMPLER_NAME = "euler";
 var SCHEDULER = "normal";
 var DENOISE = 0.8;
 
+remove("EmptyLatentImage");
+remove("PreviewImage");
+remove("SaveImage");
+remove("LatentUpscale");
+remove("VAEEncode");
+remove("SetLatentNoiseMask");
+removeOut();
+
 var vaeEncode = create("VAEEncode");
 var setLatentNoiseMask = create("SetLatentNoiseMask");
 var saveImage = create("SaveImage");
 var ckpt = findOne("Load Checkpoint");
 var vaeDecode = findOneLast("VAEDecode");
 var sampler = findOneLast("KSampler");
-
-remove("EmptyLatentImage");
-remove("PreviewImage");
-remove("SaveImage");
-remove("LatentUpscale");
-remove("VAEEncode");
 
 vaeEncode.connectInput("pixels", MAIN);
 vaeEncode.connectInput("vae", ckpt);
@@ -140,7 +143,8 @@ setLatentNoiseMask.connectInput("mask", MAIN);
 setLatentNoiseMask.connectInput("samples", vaeEncode);
 
 saveImage.connectInput("images", vaeDecode);
-saveImage.setValue("filename_prefix", IMAGE_NAME);
+saveImage.setValue("output_path", "");
+saveImage.setValue("filename_prefix", IMAGE_NAME.split("_")[0]);
 
 sampler.connectInput("model", ckpt);
 sampler.connectInput("latent", setLatentNoiseMask);
@@ -152,7 +156,7 @@ sampler.setValue("scheduler", SCHEDULER);
 sampler.setValue("denoise", DENOISE);
 
 // load inpainted image
-onEnd = async (images) => await loadFile(images[0]);
+onEnd = async (images) => await loadFile(images);
 ```
 
 - Connect LATENT output of "Load image" node in each image workflow
@@ -182,7 +186,7 @@ vaeEncode.connectInput("VAE", findOne("Load Checkpoint"));
 vaeEncode.connectOutput("LATENT", findOne("KSampler"));
 ```
 
-- Remove all "Preview Image" nodes
+- Remove "Preview Image" nodes inside the flow
 ```js
 // case 1
 remove("PreviewImage");
@@ -195,17 +199,9 @@ find("PreviewImage").forEach(e => {
 });
 ```
 
-- Disable all "Preview Image" nodes
+- Remove any nodes outside the flow
 ```js
-// case 1
-disable("PreviewImage");
-```
-
-```js
-// case 2
-find("PreviewImage").forEach(e => {
-  if (e.isEnd) { e.disable() }
-});
+removeOut();
 ```
 
 - Remove all "Ksampler" nodes that does not connected output.

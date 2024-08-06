@@ -112,7 +112,6 @@ function initCommandNode() {
   text += `\n// node.save() => Node: This method must be executed from the node has IMAGE output.`;
 
   w.value = text;
-  w.prevValue = text;
   w.isChanged = false;
   w.callback = (currValue) => {
     if (app.configuringGraph) {
@@ -152,6 +151,17 @@ function initCommandNode() {
 
 app.registerExtension({
 	name: "shinich39.pkg39.command",
+  async afterConfigureGraph(missingNodeTypes) {
+    for (const node of app.graph._nodes) {
+      if (isCommandNode(node)) {
+        // bug fix first run after refreshing
+        const w = node.widgets?.[0];
+        if (w) {
+          w.prevValue = w.value;
+        }
+      }
+    }
+	},
   nodeCreated(node) {
     if (isCommandNode(node)) {
       initCommandNode.apply(node);

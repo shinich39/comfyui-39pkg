@@ -336,12 +336,13 @@ function handleWheelEvent(self, e) {
   e.preventDefault();
 
   const imageScale = this.origCanvas.offsetWidth / this.origCanvas.width;
+  let factor = e.shiftKey ? 3 : 0.5;
 
   // adjust brush size
   if(e.deltaY < 0)
-    this.brushSize = Math.min(this.brushSize+(2 / imageScale), 100 / imageScale);
+    this.brushSize = Math.min(this.brushSize+(factor / imageScale), 100 / imageScale);
   else
-    this.brushSize = Math.max(this.brushSize-(2 / imageScale), 1);
+    this.brushSize = Math.max(this.brushSize-(factor / imageScale), 1);
 
   this.showBrush();
 }

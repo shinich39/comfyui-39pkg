@@ -34,6 +34,7 @@ Controls\(while selecting a Load image node\):
 - Shift + Mouse left click: Drawing.  
 - Shift + Mouse right click: Remove drawing.  
 - Mouse wheel scroll: Change brush size.  
+- Shift + Mouse wheel scroll: Change brush size.  
 - Mouse move while wheel click: Move canvas.  
 - Mouse move while press space bar: Move canvas.  
 

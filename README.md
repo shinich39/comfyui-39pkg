@@ -18,8 +18,14 @@ Search "39"
 
 ## Usage
 
-### Send to pkg39  
-Click the "Send to pkg39" button in context menu of "Preview Image" node, image copied to "/ComfyUI/pkg39_images" directory.  
+### Added menu to Save Image node  
+- Send to pkg39  
+
+Selected image copied to "/ComfyUI/pkg39_images" directory.  
+
+- Send to Load image  
+
+Load selected image at the "Load image" node.  
 
 ### Load image node  
 Enter dir_path and index to load image.  

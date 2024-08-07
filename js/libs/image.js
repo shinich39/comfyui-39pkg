@@ -26,7 +26,7 @@ import {
   playSound,
   loopSound,
   selectNode,
-  parseExecuteResponse,
+  parseObjectURL,
 } from "./pkg39-utils.js";
 
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
@@ -819,7 +819,7 @@ function initLoadImageNode() {
           }
         }
 
-        // covert to pkg39 node
+        // convert to pkg39 node
         nodes = nodes
           .map(e => returnNodeObject(e))
           .filter(e => !!e);
@@ -1497,7 +1497,7 @@ async function executedHandler({ detail }) {
   }
 
   const images = detail.output.images.map(e => {
-    return parseExecuteResponse(e).filePath;
+    return parseObjectURL(e).filePath;
   });
 
   for (const node of app.graph._nodes) {

@@ -161,7 +161,7 @@ function selectNode(node) {
   app.canvas.selectNode(node);
 }
 
-function parseExecuteResponse(obj) {
+function parseObjectURL(obj) {
   let filePath = "ComfyUI/";
   let dirPath = "ComfyUI/";
   let filename = obj.filename;
@@ -204,5 +204,5 @@ export {
   playSound,
   loopSound,
   selectNode,
-  parseExecuteResponse,
+  parseObjectURL,
 }

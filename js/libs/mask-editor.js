@@ -404,12 +404,6 @@ function pointerDownEvent(self, e) {
     } else {
       if (e.button == 0) {
         // shift + left click
-        maskCtx.beginPath();
-        maskCtx.fillStyle = DEFAULT_MASK_COLOR;
-        maskCtx.globalCompositeOperation = "source-over";
-        maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-        maskCtx.fill();
-
         drawCtx.beginPath();
         drawCtx.fillStyle = this.drawColor;
         drawCtx.globalCompositeOperation = "source-over";
@@ -417,11 +411,6 @@ function pointerDownEvent(self, e) {
         drawCtx.fill();
       } else {
         // shift + right click
-        maskCtx.beginPath();
-        maskCtx.globalCompositeOperation = "destination-out";
-        maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-        maskCtx.fill();
-
         drawCtx.beginPath();
         drawCtx.globalCompositeOperation = "destination-out";
         drawCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
@@ -495,13 +484,14 @@ function drawMoveEvent(self, e) {
 
     if (diff > 20 && !this.drawingMode) {
       requestAnimationFrame(() => {
-        maskCtx.beginPath();
-        maskCtx.fillStyle = DEFAULT_MASK_COLOR;
-        maskCtx.globalCompositeOperation = "source-over";
-        maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-        maskCtx.fill();
 
         if (e.shiftKey) {
+          maskCtx.beginPath();
+          maskCtx.fillStyle = DEFAULT_MASK_COLOR;
+          maskCtx.globalCompositeOperation = "source-over";
+          maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
+          maskCtx.fill();
+        } else {
           drawCtx.beginPath();
           drawCtx.fillStyle = this.drawColor;
           drawCtx.globalCompositeOperation = "source-over";
@@ -519,11 +509,11 @@ function drawMoveEvent(self, e) {
         var distance = Math.sqrt(dx * dx + dy * dy);
         var directionX = dx / distance;
         var directionY = dy / distance;
-
-        maskCtx.beginPath();
-        maskCtx.fillStyle = DEFAULT_MASK_COLOR;
-        maskCtx.globalCompositeOperation = "source-over";
-        if (e.shiftKey) {
+        if (!e.shiftKey) {
+          maskCtx.beginPath();
+          maskCtx.fillStyle = DEFAULT_MASK_COLOR;
+          maskCtx.globalCompositeOperation = "source-over";
+        } else {
           drawCtx.beginPath();
           drawCtx.fillStyle = this.drawColor;
           drawCtx.globalCompositeOperation = "source-over";
@@ -531,9 +521,10 @@ function drawMoveEvent(self, e) {
         for (var i = 0; i < distance; i+=5) {
           var px =  this.lastx + (directionX * i);
           var py =  this.lasty + (directionY * i);
-          maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
-          maskCtx.fill();
-          if (e.shiftKey) {
+          if (!e.shiftKey) {
+            maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
+            maskCtx.fill();
+          } else {
             drawCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
             drawCtx.fill();
           }
@@ -560,12 +551,13 @@ function drawMoveEvent(self, e) {
 
     if(diff > 20 && !this.drawingMode) { // cannot tracking drawingMode for touch event
       requestAnimationFrame(() => {
-        maskCtx.beginPath();
-        maskCtx.globalCompositeOperation = "destination-out";
-        maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-        maskCtx.fill();
 
-        if (e.shiftKey) {
+        if (!e.shiftKey) {
+          maskCtx.beginPath();
+          maskCtx.globalCompositeOperation = "destination-out";
+          maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
+          maskCtx.fill();
+        } else {
           drawCtx.beginPath();
           drawCtx.globalCompositeOperation = "destination-out";
           drawCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
@@ -583,18 +575,20 @@ function drawMoveEvent(self, e) {
         var directionX = dx / distance;
         var directionY = dy / distance;
   
-        maskCtx.beginPath();
-        maskCtx.globalCompositeOperation = "destination-out";
-        if (e.shiftKey) {
+        if (!e.shiftKey) {
+          maskCtx.beginPath();
+          maskCtx.globalCompositeOperation = "destination-out";
+        } else {
           drawCtx.beginPath();
           drawCtx.globalCompositeOperation = "destination-out";
         }
         for (var i = 0; i < distance; i+=5) {
           var px = this.lastx + (directionX * i);
           var py = this.lasty + (directionY * i);
-          maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
-          maskCtx.fill();
-          if (e.shiftKey) {
+          if (!e.shiftKey) {
+            maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
+            maskCtx.fill();
+          } else {
             drawCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
             drawCtx.fill();
           }

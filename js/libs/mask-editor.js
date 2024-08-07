@@ -30,7 +30,6 @@ function initMaskEditor() {
     fontSize: "0.8rem",
     letterSpacing: 0,
     pointerEvents: "none",
-    zIndex: 999,
   });
 
   const origCanvas = document.createElement("canvas");
@@ -76,6 +75,7 @@ function initMaskEditor() {
   });
 
   widget.node = this;
+  widget.container = container;
 
   widget.serializeValue = () => undefined;
 
@@ -94,6 +94,7 @@ function initMaskEditor() {
   widget.maskCanvas = maskCanvas;
   widget.maskCtx = maskCtx;
 
+  widget.containerSize = [container.clientWidth, container.clientHeight];
   widget.zoomRatio = 1.0;
   widget.panX = 0;
   widget.panY = 0;
@@ -141,6 +142,7 @@ function initMaskEditor() {
     imagesLoaded();
   }
 
+  widget.updateContainerSize = updateContainerSize;
   widget.initializeCanvasPanZoom = initializeCanvasPanZoom;
   widget.invalidatePanZoom = invalidatePanZoom;
   widget.showBrush = showBrush;
@@ -220,13 +222,16 @@ function dataURLToBlob(dataURL) {
 }
 
 function initializeCanvasPanZoom() {
+  // set containerSize
+  this.updateContainerSize();
+
   // set initialize
   let drawWidth = this.origImg.width;
   let drawHeight = this.origImg.height;
 
-  let width = this.element.clientWidth;
-  let height = this.element.clientHeight;
-
+  let width = this.containerSize[0];
+  let height = this.containerSize[1];
+  
   if (this.origImg.width > width) {
     drawWidth = width;
     drawHeight = (drawWidth / this.origImg.width) * this.origImg.height;
@@ -443,6 +448,10 @@ function drawMoveEvent(self, e) {
       app.canvas.draw(true, true);
       return;
     }
+  }
+
+  if (!this.drawingMode) {
+    return;
   }
 
   let left_button_down = window.TouchEvent && e instanceof TouchEvent || e.buttons == 1;
@@ -769,6 +778,12 @@ function pointerUpEvent(e) {
         w.movingMode = false;
       }
     }
+  }
+}
+
+function updateContainerSize() {
+  if (this.container.clientWidth && this.container.clientHeight) {
+    this.containerSize = [this.container.clientWidth, this.container.clientHeight];
   }
 }
 

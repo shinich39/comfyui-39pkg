@@ -52,11 +52,14 @@ def get_images_with_metadata(dir_path):
 
       image_name, image_ext = os.path.splitext(file)
       image_path = Path(os.path.join(dir_path, file)).as_posix()
-      mask_name = "." + file
-      mask_path = Path(os.path.join(dir_path, mask_name)).as_posix()
+      draw_name = "." + image_name + "_d"
+      draw_path = Path(os.path.join(dir_path, draw_name + ".png")).as_posix()
+      mask_name = "." + image_name + "_m"
+      mask_path = Path(os.path.join(dir_path, mask_name + ".png")).as_posix()
 
       with Image.open(image_path) as image:
         if isinstance(image, PngImageFile):
+          is_draw_exists = os.path.exists(draw_path)
           is_mask_exists = os.path.exists(mask_path)
           width = image.width
           height = image.height
@@ -64,8 +67,10 @@ def get_images_with_metadata(dir_path):
           format = image.format
           image_list.append({
             "dir_path": dir_path,
-            "image_path": image_path,
-            "image_name": image_name,
+            "original_path": image_path,
+            "original_name": image_name,
+            "draw_path": draw_path if is_draw_exists else None,
+            "draw_name": draw_name if is_draw_exists else None,
             "mask_path": mask_path if is_mask_exists else None,
             "mask_name": mask_name if is_mask_exists else None,
             "width": width,
@@ -106,47 +111,73 @@ async def save_image(request):
   except Exception:
     print(traceback.format_exc())
     return web.Response(status=400)
-  
-@PromptServer.instance.routes.post("/shinich39/pkg39/save_mask_image")
-async def save_mask_image(request):
+
+@PromptServer.instance.routes.post("/shinich39/pkg39/edit_image")
+async def edit_image(request):
   post = await request.post()
-  mask_image = post.get("image")
+  draw_image = post.get("draw")
+  mask_image = post.get("mask")
   original_path = post.get("path")
   dir_path = os.path.dirname(original_path)
   original_name = os.path.basename(original_path)
-  mask_name = "." + original_name
-  mask_path = os.path.join(dir_path, mask_name)
+  image_name, image_ext = os.path.splitext(original_name)
 
-  if os.path.isfile(original_path):
-    with Image.open(original_path) as original_pil:
-      metadata = PngInfo()
-      if hasattr(original_pil,'text'):
-        for key in original_pil.text:
-          metadata.add_text(key, original_pil.text[key])
-      original_pil = original_pil.convert('RGBA')
-      mask_pil = Image.open(mask_image.file).convert('RGBA')
+  draw_name = "." + image_name + "_d"
+  draw_path = os.path.join(dir_path, draw_name + ".png")
+  mask_name = "." + image_name + "_m"
+  mask_path = os.path.join(dir_path, mask_name + ".png")
+  res_name = "." + image_name + "_r"
+  res_path = os.path.join(dir_path, res_name + ".png")
 
-      # alpha copy
-      new_alpha = mask_pil.getchannel('A')
-      original_pil.putalpha(new_alpha)
-      original_pil.save(mask_path, compress_level=4, pnginfo=metadata)
-
-    return web.json_response({
-      "mask_name": mask_name,
-      "mask_path": mask_path,
-    })
+  # save draw image
+  draw_pil = Image.open(draw_image.file).convert("RGBA")
+  draw_pil.save(draw_path, compress_level=4)
   
-@PromptServer.instance.routes.post("/shinich39/pkg39/remove_mask_image")
-async def remove_mask_image(request):
+  # save mask image
+  mask_pil = Image.open(mask_image.file).convert('RGBA')
+  mask_pil.save(mask_path, compress_level=4)
+
+  # create result image
+  orig_pil = Image.open(original_path).convert("RGBA")
+
+  # merge draw image
+  orig_pil.paste(draw_pil, (0,0), draw_pil)
+
+  # merge mask image
+  mask_alpha = mask_pil.getchannel('A')
+  orig_pil.putalpha(mask_alpha)
+  orig_pil.save(res_path, compress_level=4)
+
+  return web.json_response({
+    "draw_name": draw_name,
+    "draw_path": draw_path,
+    "mask_name": mask_name,
+    "mask_path": mask_path,
+  })
+  
+@PromptServer.instance.routes.post("/shinich39/pkg39/clear_image")
+async def clear_image(request):
   req = await request.json()
   original_path = req["path"]
   dir_path = os.path.dirname(original_path)
   original_name = os.path.basename(original_path)
-  mask_name = "." + original_name
-  mask_path = os.path.join(dir_path, mask_name)
+  image_name, image_ext = os.path.splitext(original_name)
+
+  draw_name = "." + image_name + "_d"
+  draw_path = os.path.join(dir_path, draw_name + ".png")
+  mask_name = "." + image_name + "_m"
+  mask_path = os.path.join(dir_path, mask_name + ".png")
+  res_name = "." + image_name + "_r"
+  res_path = os.path.join(dir_path, res_name + ".png")
+
+  if os.path.exists(draw_path):
+    os.remove(draw_path)
 
   if os.path.exists(mask_path):
     os.remove(mask_path)
+
+  if os.path.exists(res_path):
+    os.remove(res_path)
 
   return web.Response(status=200)
 
@@ -176,12 +207,19 @@ class LoadImage():
   RETURN_NAMES = ("IMAGE", "MASK",)
 
   def exec(self, dir_path, index, mode, filename, **kwargs):
-    image_name = filename + ".png"
-    image_path = os.path.join(dir_path, image_name)
-    mask_name = "." + image_name
-    mask_path = os.path.join(dir_path, mask_name)
-    is_mask_exists = os.path.exists(mask_path)
-    image = Image.open(mask_path if is_mask_exists else image_path)
+    orig_name = filename
+    orig_path = os.path.join(dir_path, orig_name + ".png")
+    res_name = "." + orig_name + "_r"
+    res_path = os.path.join(dir_path, res_name + ".png")
+    is_res_exists = os.path.exists(res_path)
+
+    file_path = None
+    if is_res_exists:
+      file_path = res_path
+    else:
+      file_path = orig_path
+
+    image = Image.open(file_path)
     img = ImageOps.exif_transpose(image)
     image = img.convert("RGB")
     image = np.array(image).astype(np.float32) / 255.0

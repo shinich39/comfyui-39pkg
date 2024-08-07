@@ -5,7 +5,7 @@ Automation for generating image from image.
 ## Features
 
 - Create automation img2img flow with Any Custom nodes.  
-- Quick inpainting.  
+- Quick inpainting and drawing.  
 
 ## Nodes  
 Add node > pkg39  
@@ -28,8 +28,11 @@ Controls\(while selecting a Load image node\):
 - F5 or Ctrl + r: Reload images.  
 - Left, Right: Change index.  
 - -, =: Change canvas zoom.  
-- Mouse left click: Add mask.  
-- Mouse right click: Remove mask.  
+- Ctrl + left click: Change brush color to current pixel.  
+- Mouse left click: Drawing with mask.  
+- Mouse right click: Remove drawing with mask.  
+- Shift + Mouse left click: Add mask.  
+- Shift + Mouse right click: Remove mask.  
 - Mouse wheel scroll: Change brush size.  
 - Mouse move while wheel click: Move canvas.  
 - Mouse move while press space bar: Move canvas.  

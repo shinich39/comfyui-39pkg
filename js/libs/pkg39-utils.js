@@ -17,6 +17,10 @@ if (!document.getElementById("pkg39-sound")) {
   document.body.appendChild(AUDIO_ELEMENT);
 }
 
+function getImageURL(filePath) {
+  return `/shinich39/pkg39/image?path=${encodeURIComponent(filePath)}&rand=${Date.now()}`;
+}
+
 function isLoadImageNode(node) {
   return LOAD_IMAGE_NODE_TYPE === node.comfyClass;
 }
@@ -180,6 +184,7 @@ function parseExecuteResponse(obj) {
 }
 
 export {
+  getImageURL,
   isLoadImageNode,
   isCommandNode,
   getLoaderId,

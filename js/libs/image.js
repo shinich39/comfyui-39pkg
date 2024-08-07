@@ -3,8 +3,10 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { getSamplerNodes, getNodeMap } from "./parser.js";
+import { initMaskEditor } from "./mask-editor.js";
 import * as util from "./util.min.js";
 import {
+  getImageURL,
   isLoadImageNode, 
   isCommandNode,
   isPkg39Node, 
@@ -27,7 +29,6 @@ import {
   parseExecuteResponse,
 } from "./pkg39-utils.js";
 
-const MASK_COLOR = {r: 0, g: 0, b: 0, rgb: "rgb(0,0,0)", };
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
@@ -38,9 +39,6 @@ const DEFAULT_ENCODE_NODE_NAME = "VAEEncode";
 const DEFAULT_DECODE_NODE_NAME = "VAEDecode";
 const DEFAULT_UPSCALER_NODE_NAME = "LatentUpscale";
 
-function getImageURL(filePath) {
-  return `/shinich39/pkg39/image?path=${encodeURIComponent(filePath)}&rand=${Date.now()}`;
-}
 
 function initLoadImageNode() {
   try {
@@ -70,147 +68,18 @@ function initLoadImageNode() {
         this.pkg39.FILENAME = this.widgets.find(e => e.name === "filename");
 
         if (!this.pkg39.MASK) {
-          const container = document.createElement("div");
-          Object.assign(container.style, {
-            position: "relative",
-            display: "flex",
-            justifyContent: "center", 
-            alignItems: "center",
-            color: "var(--descrip-text)",
-            fontFamily: "Verdana, Arial, Helvetica, sans-serif",
-            fontSize: "0.8rem",
-            letterSpacing: 0,
-            pointerEvents: "none",
-            zIndex: 999,
-          });
-          const originalCanvas = document.createElement("canvas");
-          const originalCtx = originalCanvas.getContext("2d", {willReadFrequently: true});
-          Object.assign(originalCanvas.style, {
-            position: "absolute",
-            maxWidth: "100%",
-            maxHeight: "100%",
-            pointerEvents: "auto",
-          });
-          const maskCanvas = document.createElement("canvas");
-          const maskCtx = maskCanvas.getContext("2d", {willReadFrequently: true});
-          Object.assign(maskCanvas.style, {
-            position: "absolute",
-            mixBlendMode: "initial",
-            opacity: 0.7,
-            maxWidth: "100%",
-            maxHeight: "100%",
-            pointerEvents: "auto",
-          });
-
-          container.appendChild(originalCanvas);
-          container.appendChild(maskCanvas);
-          
-          this.pkg39.MASK = this.addDOMWidget("maskeditor", "", container, {
-            serialize: false,
-            getMinHeight: function() {
-              return self.size[0];
-            },
-          });
-
-          let w = this.pkg39.MASK;
-          w.serializeValue = () => undefined;
-          w.originalCanvas = originalCanvas;
-          w.originalCtx = originalCtx;
-          w.maskCanvas = maskCanvas;
-          w.maskCtx = maskCtx;
-          w.zoomRatio = 1.0;
-          w.panX = 0;
-          w.panY = 0;
-          w.brushSize = 100;
-          w.drawingMode = false;
-          w.movingMode = false;
-          w.lastx = -1;
-          w.lasty = -1;
-          w.lasttime = 0;
-
-          setMaskWidgetEvents.apply(this, [w]);
-
-          const originalImg = new Image();
-          w.originalImg = originalImg;
-          w.originalImgLoaded = false;
-          
-          const maskImg = new Image();
-          w.maskImg = maskImg;
-          w.maskImgLoaded = false;
-
-          originalImg.onload = function() {
-            w.originalImgLoaded = true;
-            w.originalCanvas.width = originalImg.width;
-            w.originalCanvas.height = originalImg.height;
-            w.originalCtx.drawImage(originalImg, 0, 0, originalImg.width, originalImg.height);
-            imagesLoaded();
-          }
-
-          maskImg.onload = function() {
-            w.maskImgLoaded = true;
-            w.maskCanvas.width = maskImg.width;
-            w.maskCanvas.height = maskImg.height;
-            w.maskCtx.drawImage(maskImg, 0, 0, maskImg.width, maskImg.height);
-            imagesLoaded();
-          }
-
-          function imagesLoaded() {
-            if (w.originalImgLoaded && w.maskImgLoaded) {
-              // paste mask data into alpha channel
-              const maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
-      
-              // invert mask
-              for (let i = 0; i < maskData.data.length; i += 4) {
-                if(maskData.data[i+3] == 255) {
-                  maskData.data[i+3] = 0;
-                } else {
-                  maskData.data[i+3] = 255;
-                }
-      
-                maskData.data[i] = MASK_COLOR.r;
-                maskData.data[i+1] = MASK_COLOR.g;
-                maskData.data[i+2] = MASK_COLOR.b;
-              }
-      
-              maskCtx.globalCompositeOperation = 'source-over';
-              maskCtx.putImageData(maskData, 0, 0);
-              w.initializeCanvasPanZoom();
-            }
-          }
-
-          // focus to node
-          container.addEventListener("click", function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            document.getElementById("graph-canvas").focus();
-          });
-
-          // prevent context menu for removing mask
-          originalCanvas.addEventListener("contextmenu", function(e) {
-            e.preventDefault();
-          });
-
-          maskCanvas.addEventListener("contextmenu", function(e) {
-            e.preventDefault();
-          });
+          this.pkg39.MASK = initMaskEditor.apply(this);
 
           // add mask control widget
-          const rmw = this.addWidget("button", "Remove mask", null, () => {}, {
+          const clearWidget = this.addWidget("button", "Clear", null, () => {}, {
             serialize: false,
           });
 
-          rmw.computeSize = () => [0, 26];
-          rmw.serializeValue = () => undefined;
-          rmw.callback = function() {
-            w.removeMaskEvent();
+          clearWidget.computeSize = () => [0, 26];
+          clearWidget.serializeValue = () => undefined;
+          clearWidget.callback = function() {
+            self.pkg39.MASK.clearEvent();
           }
-
-          // canvas resize event
-          const onResize = this.onResize;
-          this.onResize = function (size) {
-            w.initializeCanvasPanZoom();
-            onResize?.apply(this, arguments);
-          };
         }
 
         if (!this.pkg39.DIR_PATH) {
@@ -270,7 +139,7 @@ function initLoadImageNode() {
       await this.pkg39.loadImages();
 
       let idx = this.pkg39.loadedImages.findIndex(e => {
-        return e.imageName === filename;
+        return e.origName === filename;
       });
 
       if (idx === -1) {
@@ -293,12 +162,15 @@ function initLoadImageNode() {
       const w = this.pkg39.MASK;
       w.element.style.width = this.size[0] - 32;
       w.element.style.height = this.size[0] - 32;
-      w.originalImgLoaded = false;
+      w.origImgLoaded = false;
+      w.drawImgLoaded = false;
       w.maskImgLoaded = false;
-      w.originalCtx.clearRect(0,0,w.originalCanvas.width,w.originalCanvas.height);
+      w.origCtx.clearRect(0,0,w.origCanvas.width,w.origCanvas.height);
+      w.drawCtx.clearRect(0,0,w.drawCanvas.width,w.drawCanvas.height);
       w.maskCtx.clearRect(0,0,w.maskCanvas.width,w.maskCanvas.height);
-      w.originalImg.src = null;
-      w.maskImg.src = null;
+      w.origImg.src = "";
+      w.drawImg.src = "";
+      w.maskImg.src = "";
     }).bind(this);
 
     this.pkg39.clearImage = (async function() {
@@ -321,8 +193,8 @@ function initLoadImageNode() {
         this.pkg39.FILENAME.value = "NO IMAGE";
         throw new Error(`No image in ${this.pkg39.DIR_PATH.value}`);
       }
-      this.pkg39.FILENAME.prevValue = this.pkg39.selectedImage.imageName;
-      this.pkg39.FILENAME.value = this.pkg39.selectedImage.imageName;
+      this.pkg39.FILENAME.prevValue = this.pkg39.selectedImage.origName;
+      this.pkg39.FILENAME.value = this.pkg39.selectedImage.origName;
     }).bind(this);
 
     this.pkg39.renderImage = (async function() {
@@ -333,9 +205,10 @@ function initLoadImageNode() {
         return;
       }
       try {
-        const { imagePath, maskPath, imageName, } = this.pkg39.selectedImage;
-        this.pkg39.MASK.originalImg.src = getImageURL(imagePath);
-        this.pkg39.MASK.maskImg.src = getImageURL(maskPath || imagePath);
+        const { origPath, drawPath, maskPath, } = this.pkg39.selectedImage;
+        this.pkg39.MASK.origImg.src = getImageURL(origPath);
+        this.pkg39.MASK.drawImg.src = drawPath ? getImageURL(drawPath) : "";
+        this.pkg39.MASK.maskImg.src = maskPath ? getImageURL(maskPath) : "";
       } catch(err) {
         console.error(err);
       }
@@ -1264,10 +1137,8 @@ function initLoadImageNode() {
           const MAIN = returnNodeObject(self);
           const DIR_PATH = selectedImage.dirPath;
           const INDEX = selectedIndex;
-          const IMAGE_PATH = selectedImage.imagePath;
-          const IMAGE_NAME = selectedImage.imageName;
-          const MASK_PATH = selectedImage.maskPath;
-          const MASK_NAME = selectedImage.maskName;
+          const IMAGE_PATH = selectedImage.origPath;
+          const IMAGE_NAME = selectedImage.origName;
 
           const STATE = self.pkg39.state;
           const SEED = getRandomSeed();
@@ -1405,8 +1276,10 @@ try {
               const workflow = JSON.parse(image.info.workflow);
               const prompt = JSON.parse(image.info.prompt);
               this.pkg39.loadedImages.push({
-                imagePath: image["image_path"],
-                imageName: image["image_name"],
+                origPath: image["original_path"],
+                origName: image["original_name"],
+                drawPath: image["draw_path"],
+                drawName: image["draw_name"],
                 maskPath: image["mask_path"],
                 maskName: image["mask_name"],
                 width: image.width,
@@ -1650,428 +1523,6 @@ async function loadImages(dirPath) {
   return data;
 }
 
-function setMaskWidgetEvents(widget) {
-  const node = this;
-  widget.initializeCanvasPanZoom = initializeCanvasPanZoom;
-  widget.invalidatePanZoom = invalidatePanZoom;
-  widget.showBrush = showBrush;
-  widget.hideBrush = hideBrush;
-  widget.handleWheelEvent = handleWheelEvent;
-  widget.pointerMoveEvent = pointerMoveEvent;
-  widget.pointerDownEvent = pointerDownEvent;
-  widget.drawMoveEvent = drawMoveEvent;
-  widget.pointerUpEvent = pointerUpEvent;
-  widget.saveMaskEvent = saveMaskEvent;
-  widget.removeMaskEvent = removeMaskEvent;
-
-  widget.maskCanvas.addEventListener('wheel', (event) => widget.handleWheelEvent(widget, event));
-  widget.maskCanvas.addEventListener('pointerleave', (event) => widget.hideBrush(widget, event));
-  widget.maskCanvas.addEventListener('pointerdown', (event) => widget.pointerDownEvent(widget, event));
-  widget.maskCanvas.addEventListener('pointermove', (event) => widget.drawMoveEvent(widget, event));
-
-  // Helper function to convert a data URL to a Blob object
-  function dataURLToBlob(dataURL) {
-    const parts = dataURL.split(';base64,');
-    const contentType = parts[0].split(':')[1];
-    const byteString = atob(parts[1]);
-    const arrayBuffer = new ArrayBuffer(byteString.length);
-    const uint8Array = new Uint8Array(arrayBuffer);
-    for (let i = 0; i < byteString.length; i++) {
-      uint8Array[i] = byteString.charCodeAt(i);
-    }
-    return new Blob([arrayBuffer], { type: contentType });
-  }
-
-  function initializeCanvasPanZoom() {
-    // set initialize
-    let drawWidth = this.originalImg.width;
-    let drawHeight = this.originalImg.height;
-
-    let width = this.element.clientWidth;
-    let height = this.element.clientHeight;
-
-    if (this.originalImg.width > width) {
-      drawWidth = width;
-      drawHeight = (drawWidth / this.originalImg.width) * this.originalImg.height;
-    }
-
-    if (drawHeight > height) {
-      drawHeight = height;
-      drawWidth = (drawHeight / this.originalImg.height) * this.originalImg.width;
-    }
-
-    this.zoomRatio = drawWidth / this.originalImg.width;
-
-    const canvasX = (width - drawWidth) / 2;
-    const canvasY = (height - drawHeight) / 2;
-    this.panX = canvasX;
-    this.panY = canvasY;
-
-    this.invalidatePanZoom();
-  }
-
-  function invalidatePanZoom() {
-    let rawWidth = this.originalImg.width * this.zoomRatio;
-    let rawHeight = this.originalImg.height * this.zoomRatio;
-
-    if(this.panX + rawWidth < 10) {
-      this.panX = 10 - rawWidth;
-    }
-
-    if(this.panY + rawHeight < 10) {
-      this.panY = 10 - rawHeight;
-    }
-
-    let width = `${rawWidth}px`;
-    let height = `${rawHeight}px`;
-
-    let left = `${this.panX}px`;
-    let top = `${this.panY}px`;
-
-    this.maskCanvas.style.width = width;
-    this.maskCanvas.style.height = height;
-    this.maskCanvas.style.left = left;
-    this.maskCanvas.style.top = top;
-
-    this.originalCanvas.style.width = width;
-    this.originalCanvas.style.height = height;
-    this.originalCanvas.style.left = left;
-    this.originalCanvas.style.top = top;
-  }
-
-  function showBrush() {
-    if (!this.brush) {
-      this.brush = document.createElement("div");
-      // this.brush.className = "load-image-in-seq-mask-editor-brush";
-      document.body.appendChild(this.brush);
-    }
-    const canvasScale = app.canvas.ds.scale;
-
-    this.brush.style.backgroundColor = "rgba(0,0,0,0.2)";
-    this.brush.style.boxShadow = "0 0 0 1px white";
-    this.brush.style.borderRadius = "50%";
-    this.brush.style.MozBorderRadius = "50%";
-    this.brush.style.WebkitBorderRadius = "50%";
-    this.brush.style.position = "absolute";
-    this.brush.style.zIndex = 8889;
-    this.brush.style.pointerEvents = "none";
-    this.brush.style.width = this.brushSize * 2 * this.zoomRatio * canvasScale + "px";
-    this.brush.style.height = this.brushSize * 2 * this.zoomRatio * canvasScale + "px";
-    this.brush.style.left = (this.cursorX - this.brushSize * this.zoomRatio * canvasScale) + "px";
-    this.brush.style.top = (this.cursorY - this.brushSize * this.zoomRatio * canvasScale) + "px";
-  }
-
-  function hideBrush() {
-    if (this.brush) {
-      this.brush.parentNode.removeChild(this.brush);
-      this.brush = null;
-    }
-  }
-
-  function handleWheelEvent(self, event) {
-    event.preventDefault();
-
-    const imageScale = this.originalCanvas.offsetWidth / this.originalCanvas.width;
-
-    // adjust brush size
-    if(event.deltaY < 0)
-      self.brushSize = Math.min(self.brushSize+(2 / imageScale), 100 / imageScale);
-    else
-      self.brushSize = Math.max(self.brushSize-(2 / imageScale), 1);
-
-    self.showBrush();
-
-    document.getElementById("graph-canvas").focus();
-  }
-
-  function pointerMoveEvent(self, event) {
-    self.cursorX = event.pageX;
-    self.cursorY = event.pageY;
-    self.showBrush();
-  }
-
-  function drawMoveEvent(self, event) {
-    if(event.ctrlKey || event.shiftKey) {
-      return;
-    }
-    
-    event.preventDefault();
-
-    this.cursorX = event.pageX;
-    this.cursorY = event.pageY;
-
-    self.showBrush();
-
-    // click wheel
-    if (self.movingMode) {
-      if (
-        typeof event.movementX === "number" && 
-        typeof event.movementY === "number"
-      ) {
-        app.canvas.ds.mouseDrag(
-          event.movementX,
-          event.movementY,
-        );
-  
-        app.canvas.draw(true, true);
-        return;
-      }
-    }
-
-    let left_button_down = window.TouchEvent && event instanceof TouchEvent || event.buttons == 1;
-    let right_button_down = [2, 5, 32].includes(event.buttons);
-
-    if (!event.altKey && left_button_down) {
-      var diff = performance.now() - self.lasttime;
-
-      const maskRect = self.maskCanvas.getBoundingClientRect();
-
-      var x = event.offsetX;
-      var y = event.offsetY
-
-      if(event.offsetX == null) {
-        x = event.targetTouches[0].clientX - maskRect.left;
-      }
-
-      if(event.offsetY == null) {
-        y = event.targetTouches[0].clientY - maskRect.top;
-      }
-
-      x /= self.zoomRatio;
-      y /= self.zoomRatio;
-
-      var brushSize = this.brushSize;
-      if(event instanceof PointerEvent && event.pointerType == 'pen') {
-        brushSize *= event.pressure;
-        this.last_pressure = event.pressure;
-      }
-      else if(window.TouchEvent && event instanceof TouchEvent && diff < 20){
-        // The firing interval of PointerEvents in Pen is unreliable, so it is supplemented by TouchEvents.
-        brushSize *= this.last_pressure;
-      }
-      else {
-        brushSize = this.brushSize;
-      }
-
-      if(diff > 20 && !this.drawingMode)
-        requestAnimationFrame(() => {
-          self.maskCtx.beginPath();
-          self.maskCtx.fillStyle = MASK_COLOR.rgb;
-          self.maskCtx.globalCompositeOperation = "source-over";
-          self.maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-          self.maskCtx.fill();
-          self.lastx = x;
-          self.lasty = y;
-        });
-      else
-        requestAnimationFrame(() => {
-          self.maskCtx.beginPath();
-          self.maskCtx.fillStyle = MASK_COLOR.rgb;
-          self.maskCtx.globalCompositeOperation = "source-over";
-
-          var dx = x - self.lastx;
-          var dy = y - self.lasty;
-
-          var distance = Math.sqrt(dx * dx + dy * dy);
-          var directionX = dx / distance;
-          var directionY = dy / distance;
-
-          for (var i = 0; i < distance; i+=5) {
-            var px = self.lastx + (directionX * i);
-            var py = self.lasty + (directionY * i);
-            self.maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
-            self.maskCtx.fill();
-          }
-          self.lastx = x;
-          self.lasty = y;
-        });
-
-      self.lasttime = performance.now();
-    }
-    else if((event.altKey && left_button_down) || right_button_down) {
-      const maskRect = self.maskCanvas.getBoundingClientRect();
-      const x = (event.offsetX || event.targetTouches[0].clientX - maskRect.left) / self.zoomRatio;
-      const y = (event.offsetY || event.targetTouches[0].clientY - maskRect.top) / self.zoomRatio;
-
-      var brushSize = this.brushSize;
-      if(event instanceof PointerEvent && event.pointerType == 'pen') {
-        brushSize *= event.pressure;
-        this.last_pressure = event.pressure;
-      }
-      else if(window.TouchEvent && event instanceof TouchEvent && diff < 20){
-        brushSize *= this.last_pressure;
-      }
-      else {
-        brushSize = this.brushSize;
-      }
-
-      if(diff > 20 && !drawingMode) // cannot tracking drawingMode for touch event
-        requestAnimationFrame(() => {
-          self.maskCtx.beginPath();
-          self.maskCtx.globalCompositeOperation = "destination-out";
-          self.maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-          self.maskCtx.fill();
-          self.lastx = x;
-          self.lasty = y;
-        });
-      else
-        requestAnimationFrame(() => {
-          self.maskCtx.beginPath();
-          self.maskCtx.globalCompositeOperation = "destination-out";
-          
-          var dx = x - self.lastx;
-          var dy = y - self.lasty;
-
-          var distance = Math.sqrt(dx * dx + dy * dy);
-          var directionX = dx / distance;
-          var directionY = dy / distance;
-
-          for (var i = 0; i < distance; i+=5) {
-            var px = self.lastx + (directionX * i);
-            var py = self.lasty + (directionY * i);
-            self.maskCtx.arc(px, py, brushSize, 0, Math.PI * 2, false);
-            self.maskCtx.fill();
-          }
-          self.lastx = x;
-          self.lasty = y;
-        });
-
-        self.lasttime = performance.now();
-    }
-  }
-
-  function pointerDownEvent(self, event) {
-    if (!self.originalImgLoaded || !self.maskImgLoaded) {
-      return;
-    }
-
-    if (event.ctrlKey) {
-      if (event.buttons == 1) {
-        self.mousedown_x = event.clientX;
-        self.mousedown_y = event.clientY;
-
-        self.mousedown_panX = self.panX;
-        self.mousedown_panY = self.panY;
-      }
-      return;
-    }
-
-    selectNode(node);
-
-    if (event.buttons == 4) {
-      self.movingMode = true;
-      return;
-    }
-
-    var brushSize = self.brushSize;
-    if(event instanceof PointerEvent && event.pointerType == 'pen') {
-      brushSize *= event.pressure;
-      self.last_pressure = event.pressure;
-    }
-
-    if ([0, 2, 5].includes(event.button)) {
-      self.drawingMode = true;
-
-      event.preventDefault();
-
-      if(event.shiftKey) {
-        self.zoom_lasty = event.clientY;
-        self.last_zoomRatio = self.zoomRatio;
-        return;
-      }
-
-      const maskRect = self.maskCanvas.getBoundingClientRect();
-      const x = (event.offsetX || event.targetTouches[0].clientX - maskRect.left) / self.zoomRatio;
-      const y = (event.offsetY || event.targetTouches[0].clientY - maskRect.top) / self.zoomRatio;
-
-      self.maskCtx.beginPath();
-      if (!event.altKey && event.button == 0) {
-        self.maskCtx.fillStyle = MASK_COLOR.rgb;
-        self.maskCtx.globalCompositeOperation = "source-over";
-      } else {
-        self.maskCtx.globalCompositeOperation = "destination-out";
-      }
-      self.maskCtx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-      self.maskCtx.fill();
-      self.lastx = x;
-      self.lasty = y;
-      self.lasttime = performance.now();
-    }
-  }
-
-  async function saveMaskEvent() {
-    const backupCanvas = document.createElement('canvas');
-    const backupCtx = backupCanvas.getContext('2d', {willReadFrequently:true});
-    backupCanvas.width = this.originalImg.width;
-    backupCanvas.height = this.originalImg.height;
-
-    backupCtx.clearRect(0,0, backupCanvas.width, backupCanvas.height);
-    backupCtx.drawImage(this.maskCanvas,
-      0, 0, this.maskCanvas.width, this.maskCanvas.height,
-      0, 0, backupCanvas.width, backupCanvas.height);
-
-    // paste mask data into alpha channel
-    const backupData = backupCtx.getImageData(0, 0, backupCanvas.width, backupCanvas.height);
-
-    // refine mask image
-    for (let i = 0; i < backupData.data.length; i += 4) {
-      if(backupData.data[i+3] == 255)
-        backupData.data[i+3] = 0;
-      else
-        backupData.data[i+3] = 255;
-
-      backupData.data[i] = 0;
-      backupData.data[i+1] = 0;
-      backupData.data[i+2] = 0;
-    }
-
-    backupCtx.globalCompositeOperation = 'source-over';
-    backupCtx.putImageData(backupData, 0, 0);
-
-    const formData = new FormData();
-    const dataURL = backupCanvas.toDataURL();
-    const blob = dataURLToBlob(dataURL);
-    formData.append('image', blob);
-    formData.append('path', node.pkg39.selectedImage.imagePath);
-
-    const response = await api.fetchApi('/shinich39/pkg39/save_mask_image', {
-      method: 'POST',
-      body: formData
-    });
-
-    const data = await response.json();
-
-    // set to loaded image
-    if (node?.pkg39?.selectedImage) {
-      node.pkg39.selectedImage.maskName = data.mask_name;
-      node.pkg39.selectedImage.maskPath = data.mask_path;
-    }
-  }
-
-  async function removeMaskEvent() {
-    await api.fetchApi('/shinich39/pkg39/remove_mask_image', {
-      method: 'POST',
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        path: node.pkg39.selectedImage.imagePath,
-      }),
-    });
-
-    // set to loaded image
-    if (node?.pkg39?.selectedImage) {
-      node.pkg39.selectedImage.maskName = null;
-      node.pkg39.selectedImage.maskPath = null;
-    }
-
-    // reload mask
-    this.maskImgLoaded = false;
-    this.maskCtx.clearRect(0,0,this.maskCanvas.width,this.maskCanvas.height);
-    this.maskImg.src = getImageURL(node.pkg39.selectedImage.imagePath);
-  }
-}
-
 async function keyDownEvent(e) {
   const { key, ctrlKey, metaKey, shiftKey } = e;
   if (key === "ArrowLeft") {
@@ -2108,74 +1559,8 @@ async function keyDownEvent(e) {
     await this.pkg39.renderWorkflow();
     renderCanvas();
     selectNode(this);
-  } else if (key === "-" || key === "=") {
-    e.preventDefault();
-    e.stopPropagation();
-    let n = key === "-" ? 1 : -1;
-    const prevScale = app.canvas.ds.scale;
-    const nextScale = Math.max(0.5, Math.min(10, Math.round((prevScale - n) * 10) / 10));
-    const cx = app.canvas.ds.element.width / 2;
-    const cy = app.canvas.ds.element.height / 2;
-    app.canvas.ds.changeScale(nextScale, [cx, cy]);
-    app.canvas.graph.change();
-    selectNode(this);
-
-    // fix brush size
-    if (this.pkg39?.MASK) {
-      this.pkg39.MASK.showBrush();
-    }
-  } else if (key === " ") {
-    if (this.pkg39?.MASK) {
-      this.pkg39.MASK.movingMode = true;
-      window.addEventListener("keyup", spaceBarUpEvent);
-    }
-  }
+  } 
 }
-
-async function spaceBarUpEvent(e) {
-  e.preventDefault();
-
-  // remove event
-  window.removeEventListener("keyup", spaceBarUpEvent);
-
-  // reset all moving mode
-  for (const node of app.graph._nodes) {
-    if (isLoadImageNode(node)) {
-      node.pkg39.MASK.movingMode = false;
-    }
-  }
-}
-
-function pointerUpEvent(e) {
-  e.preventDefault();
-
-  // reset all canvas
-  for (const node of app.graph._nodes) {
-    if (isLoadImageNode(node)) {
-      const w = node.widgets?.find(e => e.name === "maskeditor");
-      if (w) {
-        // call save event
-        if (w.drawingMode) {
-          w.saveMaskEvent();
-        }
-
-        // select node
-        if (w.movingMode) {
-          selectNode(node);
-          document.getElementById("graph-canvas").focus();
-        }
-
-        w.mousedown_x = null;
-        w.mousedown_y = null;
-        w.drawingMode = false;
-        w.movingMode = false;
-      }
-    }
-  }
-}
-
-// global event
-document.addEventListener('pointerup', (event) => pointerUpEvent(event));
 
 // after start a new queue
 api.addEventListener("promptQueued", promptQueuedHandler);

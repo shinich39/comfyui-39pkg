@@ -4,7 +4,7 @@ Automation for generating image from image.
 
 ## Features
 
-- Create automation img2img flow with Any Custom nodes.  
+- Create automation img2img flow with Any custom nodes.  
 - Quick inpainting.  
 
 ## Nodes  

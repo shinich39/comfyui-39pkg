@@ -53,7 +53,7 @@ var srcNode2 = findLast("TITLE|TYPE"); // in virtual workflow
 var dstNode = find(1); // in real workflow
 ```
 
-- Load nodes  
+- Load nodes with connection  
 ```js
 var srcSampler = SAMPLER;
 var dstSampler = find(2); // KSampler node in real workflow
@@ -63,13 +63,17 @@ load(srcSampler, dstSampler, "negative", replaceNodes);
 load(srcSampler, dstSampler, "latent_image");
 ```
 
-- Load widget values  
+- Load values  
 ```js
+// case 1
 var srcSampler = SAMPLER;
 var dstSampler = find(2);
 var widgetValues = get(srcSampler);
-set(srcSampler, widgetValues);
+set(srcSampler, widgetValues); // all values
 set(dstSampler, { seed: SEED }); // random seed
+
+// case 2
+load(srcSampler, dstSampler, "seed");
 ```
 
 - Stop after run 5 (In auto queue mode)  

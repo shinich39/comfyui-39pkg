@@ -98,7 +98,7 @@ async function sendToLoadImageNode() {
       const obj = parseURL(url);
       const filePath = parseObjectURL(obj).filePath;
       const node = getLoadImageNode();
-      await node.pkg39.loadImageByFilePath(filePath);
+      await node.pkg39.loadImageByPath(filePath);
     }
   }
 }

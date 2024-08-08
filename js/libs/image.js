@@ -10,9 +10,10 @@ import {
   isLoadImageNode, 
   isCommandNode,
   isPkg39Node, 
-  getLoaderId,
-  getPreviousId,
+  getLoadId,
+  getPrevNodeId,
   getRandomSeed,
+  showError,
   hideError,
   isErrorOccurred,
   isAutoQueueMode,
@@ -32,13 +33,6 @@ import {
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
-
-const DEFAULT_SAMPLER_NODE_NAME = "KSampler";
-const DEFAULT_SAVE_NODE_NAME = "SaveImage";
-const DEFAULT_ENCODE_NODE_NAME = "VAEEncode";
-const DEFAULT_DECODE_NODE_NAME = "VAEDecode";
-const DEFAULT_UPSCALER_NODE_NAME = "LatentUpscale";
-
 
 function initLoadImageNode() {
   try {
@@ -124,7 +118,7 @@ function initLoadImageNode() {
       }
     }).bind(this);
 
-    this.pkg39.loadImageByFilePath = (async function(filePath) {
+    this.pkg39.loadImageByPath = (async function(filePath) {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
@@ -150,8 +144,7 @@ function initLoadImageNode() {
       this.pkg39.clearImage();
       this.pkg39.selectImage();
       this.pkg39.renderImage();
-      await this.pkg39.renderWorkflow();
-      renderCanvas();
+      this.pkg39.executeCommand();
       selectNode(this);
     }).bind(this);
 
@@ -178,7 +171,7 @@ function initLoadImageNode() {
         throw new Error("pkg39 has not been initialized.");
       }
       this.pkg39.clearMask();
-      this.pkg39.removeWorkflow();
+      this.pkg39.clearWorkflow();
     }).bind(this);
 
     this.pkg39.selectImage = (async function() {
@@ -214,135 +207,71 @@ function initLoadImageNode() {
       }
     }).bind(this);
 
-    // render image workflow
-    this.pkg39.renderWorkflow = (async function() {
+    this.pkg39.executeCommand = (function() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
       if (!this.pkg39.selectedImage) {
         return;
       }
-      try {
-        this.pkg39.loadWorkflow();
-      } catch(err) {
-        console.error(err);
-      }
-    }).bind(this);
 
-    this.pkg39.loadWorkflow = (function() {
-      const self = this;
-
-      let { selectedImage, selectedIndex } = this.pkg39 ?? {};
+      let { selectedImage, selectedIndex } = this.pkg39;
       if (!selectedImage || !selectedImage.workflow) {
         return;
       }
 
-      const convertNodeMaps = function(nms) {
-        let newNodeMaps = [];
-        for (const nm of nms) {
-          let newNodeMap = [];
-          for (const nl of nm) {
-            let newNodes = [];
-            for (const n of nl) {
-              let node = app.graph._nodes.find(e => getPreviousId(e) === n.id);
-              if (node) {
-                newNodes.push(node);
-              }
-            }
-            newNodeMap.push(newNodes);
-          }
-          newNodeMaps.push(newNodeMap);
-        }
-        return newNodeMaps;
-      }
-
-      // remove "Load image node" in virtual canvas
-      // remove "Command node" in virtual canvas
-      function convertWorkflow(w) {
-        w = JSON.parse(JSON.stringify(w));
-        let prevConnectedTargets = [];
-        let nodeIds = [];
-        for (let i = w.nodes.length - 1; i >= 0; i--) {
-          const n = w.nodes[i];
-          const id = n.id;
-          // remove nodes
-          if (n.type === "LoadImage39") {
-            w.nodes.splice(i, 1);
-            nodeIds.push(id);
-          } else if (n.type === "Command39") {
-            // command does not have input and outputs
-            w.nodes.splice(i, 1);
-          }
-        }
-
-        let linkIds = [];
-        for (let i = w.links.length - 1; i >= 0; i--) {
-          const l = w.links[i];
-          const type = l[5];
-          const id = l[0];
-          const originId = l[1];
-          const targetId = l[3];
-          // remove links
-          if (nodeIds.indexOf(originId) > -1) {
-            w.links.splice(i, 1);
-            linkIds.push(id);
-            prevConnectedTargets.push({
-              type: type,
-              id: targetId,
-            }); 
-          }
-        }
-
-        for (const node of w.nodes) {
-          // remove input link
-          if (node.inputs) {
-            for (const input of node.inputs) {
-              if (!input.link) {
-                continue;
-              }
-              if (linkIds.indexOf(input.link) > -1) {
-                input.link = null
-              }
-            }
-          }
-
-          // remove output links
-          // if (node.outputs) {
-          //   for (const output of node.outputs) {
-          //     if (output.links) {
-          //       for (let i = output.links.length - 1; i >= 0; i--) {
-          //         const linkId = output.links[i];
-          //         if (linkIds.indexOf(linkId) > -1) {
-          //           output.links.splice(i, 1);
-          //         }
-          //       }
-          //     }
-          //   }
-          // }
-        }
-
-        return [w, prevConnectedTargets];
-      }
-
-      let width = selectedImage.width;
-      let height = selectedImage.height
-      let prompt = selectedImage.prompt;
-      let [workflow, prevConnectedTargets] = convertWorkflow(selectedImage.workflow);
+      let { width, height, prompt, workflow } = selectedImage;
       let samplerNodes = getSamplerNodes({ workflow, prompt });
-      let nodeMaps = samplerNodes.map(sampler => getNodeMap({ workflow, sampler }));
-      nodeMaps.sort((a, b) => b.length - a.length); // put the map in long order
 
       // create virtual canvas
       let graph = new LGraph(workflow);
       let canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
 
+      // parse workflow
+      samplerNodes = samplerNodes.map(sampler => {
+        const nodeMap = getNodeMap({ workflow, sampler });
+
+        const samplers = nodeMap.reduce((acc, cur) => {
+          for (const {id, type} of cur) {
+            if (type === "KSampler" || type === "KSamplerAdvanced") {
+              const node = graph._nodes.find(e => e.id === id);
+              if (node) {
+                acc.push(node);
+              }
+            }
+          }
+          return acc;
+        }, []);
+
+        return {
+          samplers: samplers,
+          nodeMap: nodeMap,
+        }
+      });
+
+      // put the map in long order
+      samplerNodes.sort((a, b) => b.map.length - a.map.length);
+
+      const samplerMaps = samplerNodes.map(e => e.samplers);
+      const nodeMaps = samplerNodes.map(e => e.nodeMap);
+
+      // select longest flow
+      const samplers = samplerMaps[0];
+      const nodeMap = nodeMaps[0];
+      
+      // this.pkg39.selectedGraph = graph;
+      // this.pkg39.selectedCanvas = canvas;
+
       // set properties
       for (const n of graph._nodes) {
+        // set pkg39 properties
         n.properties.pkg39 = {
-          loaderId: this.id,
-          previousId: n.id,
-          isEnabled: n.mode === 0,
+          loadId: this.id,
+          nodeId: n.id,
+          // isEnabled: n.mode === 0,
         }
+
+        // set color to yellow
         if (DEFAULT_NODE_COLORS) {
           n.color = DEFAULT_NODE_COLORS.yellow.color;
           n.bgcolor = DEFAULT_NODE_COLORS.yellow.bgcolor;
@@ -350,798 +279,29 @@ function initLoadImageNode() {
         }
 
         // disable pin
-        // lock => Symbol()?
         if (n.flags) {
           n.flags.pinned = false;
         }
+
+        // lock => Symbol()?
       }
 
-      graph.arrange(DEFAULT_MARGIN_X);
+      // align nodes
+      // graph.arrange(DEFAULT_MARGIN_X);
       // graph.arrange(DEFAULT_MARGIN_Y, LiteGraph.VERTICAL_LAYOUT);
-      canvas.selectNodes();
-      canvas.copyToClipboard();
-
-      // set mouse point for paste point
-      // const oldPoint = JSON.parse(JSON.stringify(app.canvas?.graph_mouse || [0, 0]));
-
-      // set position X
-      try {
-        app.canvas.graph_mouse[0] = this.pos[0] + this.size[0] + DEFAULT_MARGIN_X;
-      } catch(err) {
-        console.error(err);
-      }
-
-      // set position Y
-      try {
-        app.canvas.graph_mouse[1] = this.pos[1];
-      } catch(err) {
-        console.error(err);
-      }
-
-      // paste to original canvas
-      app.canvas.pasteFromClipboard();
-      app.canvas.deselectAllNodes();
-
-      // convert to original nodeMap from image nodeMap
-      // nodeMaps[ nodeMap[ nodeList[ node{}, node{} ] ] ]
-      nodeMaps = convertNodeMaps(nodeMaps);
-      let nodeMapIndex;
-      let nodeMap; 
-
-      const changeNodeMap = function(n) {
-        nodeMapIndex = Math.floor(Math.min(0, Math.max(n ?? 0, nodeMaps.length - 1)));
-        nodeMap = nodeMaps[nodeMapIndex];
-
-        // enable nodes in flow
-        for (const oNode of app.graph._nodes) {
-          if (!isPkg39Node(oNode)) {
-            continue;
-          }
-          let isEnabled = false;
-          if (oNode.properties.pkg39.isEnabled) {
-            for (const nodeList of nodeMap) {
-              for (const vNode of nodeList) {
-                if (oNode.id === vNode.id) {
-                  isEnabled = true;
-                  break;
-                }
-              }
-              if (isEnabled) {
-                break;
-              }
-            }
-          }
-          // bypass node that out of flow
-          oNode.mode = isEnabled ? 0 : 4; 
-        }
-      }
-
-      const returnNodeObject = function(node) {
-        if (!node) {
-          return;
-        }
-
-        let totalInputs = 0;
-        let totalOutputs = 0; 
-        let connectedInputs = 0;
-        let connectedOutputs = 0;
-        if (node && node.inputs) {
-          for (const input of node.inputs) {
-            totalInputs++;
-            if (input.link) {
-              connectedInputs++;
-            }
-          }
-        }
-
-        if (node && node.outputs) {
-          for (const output of node.outputs) {
-            totalOutputs++;
-            if (output.links && output.links.length > 0) {
-              connectedOutputs++;
-            }
-          }
-        }
-
-        return {
-          isPkg39: true,
-          isEnd: connectedOutputs < 1, 
-          isStart: connectedInputs < 1,
-          hasInput: totalInputs > 0,
-          hasOutput: totalOutputs > 0,
-          hasConnectedInput: connectedInputs > 0,
-          hasConnectedOutput: connectedOutputs > 0,
-          id: node.id,
-          title: node.title,
-          node: node,
-          type: node.comfyClass || node.type,
-          getValues: function() {
-            let result = {};
-            if (node.widgets) {
-              for (const widget of node.widgets) {
-                result[widget.name] = widget.value;
-              }
-            }
-            return result;
-          },
-          setValues: function(values) {
-            values = values ?? {};
-            if (node.widgets) {
-              for (const [key, value] of Object.entries(values)) {
-                const widget = node.widgets.find(e => e.name === key);
-                if (widget) {
-                  widget.value = value;
-                }
-              }
-            }
-            return true;
-          },
-          getValue: function(name) {
-            if (!name) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            const widget = node.widgets?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            return widget?.value ?? null;
-          },
-          setValue: function(name, value) {
-            if (!name) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            const widget = node.widgets?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (widget) {
-              widget.value = value;
-            }
-            return true;
-          },
-          replace: function(targetNode, isInheritValues = false) {
-            if (!targetNode) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            if (targetNode.isPkg39) {
-              targetNode = targetNode.node;
-            }
-            if (node.type !== targetNode.type) {
-              console.error(new Error(`Target node type is not ${node.type}`));
-              return false;
-            }
-
-            // inherit connected inputs
-            if (node.inputs) {
-              for (const input of node.inputs) {
-                let outputNode;
-                let outputSlot;
-                if (input.link) {
-                  const link = app.graph.links.find(e => e && e.id === input.link);
-                  outputNode = app.graph._nodes.find(e => e.id === link.origin_id);
-                  outputSlot = link.origin_slot;
-
-                  const inputSlot = node.findInputSlot(input.name);
-                  node.disconnectInput(inputSlot);
-
-                  const nodeSlot = targetNode.findInputSlot(input.name);
-                  if (nodeSlot > -1) {
-                    outputNode.connect(outputSlot, targetNode, nodeSlot);
-                  }
-                }
-              }
-            }
-
-            // inherit connected outputs
-            if (node.outputs && app.graph.links) {
-              for (const output of node.outputs) {
-                if (output.links) {
-                  // fix error link size updated during disconnect
-                  const links = JSON.parse(JSON.stringify(output.links));
-                  for (const linkId of links) {
-                    const link = app.graph.links.find(e => e && e.id === linkId);
-                    const inputNode = app.graph._nodes.find(e => e.id === link.target_id);
-                    const inputSlot = link.target_slot;
-  
-                    inputNode.disconnectInput(inputSlot);
-  
-                    const nodeSlot = targetNode.findOutputSlot(output.name);
-                    if (nodeSlot > -1) {
-                      targetNode.connect(nodeSlot, inputNode, inputSlot);
-                    }
-                  }
-                }
-              }
-            }
-
-            // inherit widget values
-            if (isInheritValues) {
-              if (node.widgets && targetNode.widgets) {
-                for (const widget of node.widgets) {
-                  const w = targetNode.widgets.find(e => e.name === widget.name);
-                  if (w) {
-                    w.value = widget.value
-                  }
-                }
-              }
-            }
-
-            app.graph.setDirtyCanvas(false, true);
-
-            return true;
-          },
-          getInputNode: function(name) {
-            if (!name) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            const inputNode = node;
-            const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (!input || !input.link) {
-              return;
-            }
-
-            const link = app.graph.links?.find(e => e && e.id === input.link);
-            if (!link) {
-              return;
-            }
-
-            const outputNode = app.graph._nodes.find(e => e.id === link.origin_id);
-            if (!outputNode) {
-              return;
-            }
-
-            return returnNodeObject(outputNode);
-          },
-          getOutputNode: function(name) {
-            if (!name) {
-              console.error(new Error(`Argument not found.`));
-              return [];
-            }
-            const outputNode = node;
-            const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (!output || !output.links) {
-              return [];
-            }
-
-            const links = app.graph.links?.filter(e => e && output.links.indexOf(e.id) > -1);
-            if (!links || links.length < 1) {
-              return [];
-            }
-
-            const outputNodeIds = links.map(e => e.target_id);
-            const outputNodes = app.graph._nodes.filter(e => outputNodeIds.indexOf(e.id) > -1);
-            if (!outputNodes) {
-              return [];
-            }
-
-            return outputNodes.map(e => returnNodeObject(e));
-          },
-          connectInput: function(name, outputNode) {
-            if (!name || !outputNode) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            if (outputNode.isPkg39) {
-              outputNode = outputNode.node;
-            }
-            const inputNode = node;
-            const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (input) {
-              const inputSlot = inputNode.findInputSlot(input.name);
-              const inputType = input.type.toUpperCase();
-              const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === inputType);
-              if (output) {
-                const outputSlot = outputNode.findOutputSlot(output.name);
-                if (input.link) {
-                  inputNode.disconnectInput(inputSlot);
-                }
-                outputNode.connect(outputSlot, inputNode, inputSlot);
-                app.graph.setDirtyCanvas(false, true);
-              }
-            }
-            return true;
-          },
-          connectOutput: function(name, inputNodes) {
-            if (!name || !inputNodes) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            if (!Array.isArray(inputNodes)) {
-              inputNodes = [inputNodes];
-            }
-            const outputNode = node;
-            const output = outputNode.outputs?.find(e => e.name === name || e.type.toUpperCase() === name.toUpperCase());
-            if (output) {
-              const outputSlot = outputNode.findOutputSlot(output.name);
-              const outputType = output.type.toUpperCase();
-              for (let inputNode of inputNodes) {
-                if (inputNode.isPkg39) {
-                  inputNode = inputNode.node;
-                }
-                const input = inputNode.inputs?.find(e => e.name === name || e.type.toUpperCase() === outputType);
-                if (input) {
-                  const inputSlot = inputNode.findInputSlot(input.name);
-                  if (input.link) {
-                    inputNode.disconnectInput(inputSlot);
-                  }
-                  outputNode.connect(outputSlot, inputNode, inputSlot);
-                  app.graph.setDirtyCanvas(false, true);
-                }
-              }
-            }
-            return true;
-          },
-          remove: function() {
-            app.graph.remove(node);
-          },
-          disable: function() {
-            node.mode = 4;
-          },
-          enable: function() {
-            node.mode = 0;
-          },
-          putOnRight: function(targetNode) {
-            if (!targetNode) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            if (targetNode.isPkg39) {
-              targetNode = targetNode.node;
-            }
-            node.pos[0] = targetNode.pos[0] + targetNode.size[0] + DEFAULT_MARGIN_X;
-            node.pos[1] = targetNode.pos[1];
-          },
-          putOnBottom: function(targetNode) {
-            if (!targetNode) {
-              console.error(new Error(`Argument not found.`));
-              return false;
-            }
-            if (targetNode.isPkg39) {
-              targetNode = targetNode.node;
-            }
-            node.pos[0] = targetNode.pos[0];
-            node.pos[1] = targetNode.pos[1] + targetNode.size[1] + DEFAULT_MARGIN_Y;
-          },
-          moveToRight: function() {
-            let isChanged = true;
-            while(isChanged) {
-              isChanged = false;
-              for (const n of app.graph._nodes) {
-                if (node.id === n.id) {
-                  continue;
-                }
-                const top = n.pos[1];
-                const bottom = n.pos[1] + n.size[1];
-                const left = n.pos[0];
-                const right = n.pos[0] + n.size[0];
-                const isCollisionX = left <= node.pos[0] + node.size[0] && 
-                  right >= node.pos[0];
-                const isCollisionY = top <= node.pos[1] + node.size[1] && 
-                  bottom >= node.pos[1];
-
-                if (isCollisionX && isCollisionY) {
-                  node.pos[0] = right + DEFAULT_MARGIN_X;
-                  isChanged = true;
-                }
-              }
-            }
-          },
-          moveToBottom: function() {
-            let isChanged = true;
-            while(isChanged) {
-              isChanged = false;
-              for (const n of app.graph._nodes) {
-                if (node.id === n.id) {
-                  continue;
-                }
-                const top = n.pos[1];
-                const bottom = n.pos[1] + n.size[1];
-                const left = n.pos[0];
-                const right = n.pos[0] + n.size[0];
-                const isCollisionX = left <= node.pos[0] + node.size[0] && 
-                  right >= node.pos[0];
-                const isCollisionY = top <= node.pos[1] + node.size[1] && 
-                  bottom >= node.pos[1];
-
-                if (isCollisionX && isCollisionY) {
-                  node.pos[1] = bottom + DEFAULT_MARGIN_Y;
-                  isChanged = true;
-                }
-              }
-            }
-          },
-          hires: function(w, h) {
-            return createHiresNodes.apply(this, [w, h]);
-          },
-          encode: function() {
-            return createEncodeNode.apply(this);
-          },
-          decode: function() {
-            return createDecodeNode.apply(this);
-          },
-          save: function() {
-            return createSaveNode.apply(this);
-          },
-        }
-      }
-
-      // type or title
-      const findNodesByName = function(str, options) {
-        if (typeof options !== "object") {
-          options = {};
-        }
-
-        let nodes = [];
-        let nodeIds = [];
-
-        function isValid(n) {
-          return (n.title && n.title === str) ||
-            (n.comfyClass && n.comfyClass.replace(/\s/g, "").toUpperCase() === str.replace(/\s/g, "").toUpperCase()) ||
-            (n.type && n.type.replace(/\s/g, "").toUpperCase() === str.replace(/\s/g, "").toUpperCase());
-        }
-
-        function saveNode(arr) {
-          const items = arr.filter(isValid);
-          for (const n of items) {
-            if (n && nodeIds.indexOf(n.id) === -1) {
-              nodes.push(n);
-              nodeIds.push(n.id);
-            }
-          }
-        }
-
-        if (!options.global) {
-          if (!options.reverse) {
-            // default
-            for (let i = 0; i < nodeMap.length; i++) {
-              const n = nodeMap[i];
-              saveNode(n);
-            }
-          } else {
-            for (let i = nodeMap.length - 1; i >= 0; i--) {
-              const n = nodeMap[i];
-              saveNode(n);
-            }
-          }
-        } else {
-          if (!options.reverse) {
-            for (let i = 0; i < nodeMaps.length; i++) {
-              for (let j = 0; j < nodeMaps[i].length; j++) {
-                const n = nodeMaps[i][j];
-                saveNode(n);
-              }
-            }
-          } else {
-            for (let i = 0; i < nodeMaps.length; i++) {
-              for (let j = nodeMaps[i].length - 1; j >= 0; j--) {
-                const n = nodeMaps[i][j];
-                saveNode(n);
-              }
-            }
-          }
-        }
-
-        // convert to pkg39 node
-        nodes = nodes
-          .map(e => returnNodeObject(e))
-          .filter(e => !!e);
-
-        // sort original nodes in ascending order
-        nodes.sort((a, b) => a.node.id - b.node.id);
-
-        return nodes;
-      }
-
-      const findNodeByName = function(str, options) {
-        if (typeof options !== "object") {
-          options = {
-            reverse: false,
-            global: false,
-          }
-        }
-        
-        function isValid(e) {
-          return (e.title && e.title === str) ||
-            (e.comfyClass && e.comfyClass.replace(/\s/g, "").toUpperCase() === str.replace(/\s/g, "").toUpperCase()) ||
-            (e.type && e.type.replace(/\s/g, "").toUpperCase() === str.replace(/\s/g, "").toUpperCase());
-        }
-
-        let node;
-        if (!options.reverse) {
-          for (let i = 0; i < nodeMap.length; i++) {
-            for (const n of nodeMap[i]) {
-              if (isValid(n)) {
-                node = n;
-                break;
-              }
-            }
-            if (node) {
-              break;
-            }
-          }
-        } else {
-          for (let i = nodeMap.length - 1; i >= 0; i--) {
-            for (const n of nodeMap[i]) {
-              if (isValid(n)) {
-                node = n;
-                break;
-              }
-            }
-            if (node) {
-              break;
-            }
-          }
-        }
-
-        return returnNodeObject(node);
-      }
-
-      const findNodeById = function(id) {
-        const n = app.graph._nodes.find(e => e && e.id === id);
-        return returnNodeObject(n);
-      }
-
-      const isExistsInNodeMap = function(node) {
-        for (const nodeMap of nodeMaps) {
-          for (const nodeList of nodeMap) {
-            for (const n of nodeList) {
-              if (n.id === node.id) {
-                return true;
-              }
-            }
-          }
-        }
-        return false;
-      }
-
-      const bypassNodes = function(nodes = [], b = true) {
-        if (!Array.isArray(nodes) && typeof nodes === "object") {
-          nodes = [nodes];
-        }
-        for (const node of nodes) {
-          node.bypass(b);
-        }
-      }
-
-      const removeNodes = function(nodes = []) {
-        if (!Array.isArray(nodes) && typeof nodes === "object") {
-          nodes = [nodes];
-        }
-        for (const node of nodes) {
-          node.remove();
-        }
-      }
-
-      const removeAllNodes = function() {
-        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
-          const n = app.graph._nodes[i];
-          if (getLoaderId(n) === self.id) {
-            app.graph.remove(n);
-          }
-        }
-      }
-
-      const removeOutNodes = function() {
-        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
-          const n = app.graph._nodes[i];
-          if (getLoaderId(n) === self.id && !isExistsInNodeMap(n)) {
-            app.graph.remove(n);
-          }
-        }
-      }
-
-      const bypassAllNodes = function(b = true) {
-        for (const n of app.graph._nodes) {
-          if (getLoaderId(n) === self.id) {
-            n.mode = b ? 4 : 0;
-          }
-        }
-      }
-
-      const bypassOutNodes = function(b = true) {
-        for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
-          const n = app.graph._nodes[i];
-          if (getLoaderId(n) === self.id && !isExistsInNodeMap(n)) {
-            n.mode = b ? 4 : 0;
-          }
-        }
-      }
-
-      const createNode = function(name, values, options) {
-        values = values ?? {};
-        options = { select: true, shiftY: 0, before: false, ...(options || {}) };
-        const node = LiteGraph.createNode(name);
-        if (!node) {
-          throw new Error(`${name} node can not create.`);
-        }
-
-        node.properties.pkg39 = {
-          loaderId: self.id,
-          previousId: -1,
-          isEnabled: true,
-        }
-
-        if (DEFAULT_NODE_COLORS) {
-          node.color = DEFAULT_NODE_COLORS.yellow.color;
-          node.bgcolor = DEFAULT_NODE_COLORS.yellow.bgcolor;
-          node.groupcolor = DEFAULT_NODE_COLORS.yellow.groupcolor;
-        }
-
-        if (node.widgets) {
-          for (const [key, value] of Object.entries(values)) {
-            const widget = node.widgets.find(e => e.name === key);
-            if (widget) {
-              widget.value = value;
-            }
-          }
-        }
-
-        app.graph.add(node);
-
-        if (options.select) {
-          app.canvas.selectNode(node, false);
-        }
-
-        const _node = returnNodeObject(node);
-        _node.putOnRight(self);
-        _node.moveToBottom();
-        return _node;
-      }
-
-      const createHiresNodes = function(w, h) {
-        if (!w) {
-          return false;
-        }
-        if (!this.hasOutput) {
-          return false;
-        }
-        if (!this.node.outputs.find(e => e.type === "LATENT")) {
-          return false;
-        }
-        if (!h) {
-          h = Math.floor(height * w);
-          w = Math.floor(width * w);
-        }
-
-        const isSampler = ["KSampler", "KSamplerAdvanced"].indexOf(this.type) > -1; 
-        const node = this.node;
-        const outputNodes = this.getOutputNode("LATENT");
-        const inputNodes = [];
-        if (node.inputs) {
-          for (const input of node.inputs) {
-            const link = app.graph.links?.find(e => e && e.id === input.link);
-            if (link && link.type) {
-              const n = app.graph._nodes.find(e => e.id === link.origin_id);
-              inputNodes.push({
-                name: input.name || input.type,
-                type: input.type,
-                node: returnNodeObject(n),
-              });
-            }
-          }
-        }
-
-        const widgetValues = [];
-        if (node.widgets) {
-          for (const widget of node.widgets) {
-            widgetValues.push({
-              name: widget.name,
-              value: widget.value,
-            });
-          }
-        }
-
-        const upscaler = createNode(DEFAULT_UPSCALER_NODE_NAME, {
-          width: w,
-          height: h,
-        });
-        upscaler.putOnBottom(this);
-        upscaler.moveToBottom();
-        
-        let sampler;
-        if (isSampler) {
-          sampler = createNode(this.type, this.getValues());
-        } else {
-          sampler = createNode(DEFAULT_SAMPLER_NODE_NAME);
-        }
-        sampler.putOnBottom(this);
-        sampler.moveToBottom();
-
-        this.connectOutput("LATENT", upscaler);
-
-        // connect sampler inputs
-        for (const e of inputNodes) {
-          if (e.type !== "LATENT") {
-            sampler.connectInput(e.name, e.node);
-          }
-        }
-
-        // connect upscaler -> sampler
-        upscaler.connectOutput("LATENT", sampler);
-
-        // connect sampler -> outputNodes
-        sampler.connectOutput("LATENT", outputNodes);
-        
-        return [upscaler, sampler];
-      }
-
-      const createEncodeNode = function() {
-        if (!this.hasOutput) {
-          return false;
-        }
-        if (!this.node.outputs.find(e => e.type === "IMAGE")) {
-          return false;
-        }
-
-        const node = createNode(DEFAULT_ENCODE_NODE_NAME);
-        node.putOnRight(this);
-        node.moveToBottom();
-
-        this.connectOutput("IMAGE", node);
-
-        return node;
-      }
-
-      const createDecodeNode = function() {
-        if (!this.hasOutput) {
-          return false;
-        }
-        if (!this.node.outputs.find(e => e.type === "LATENT")) {
-          return false;
-        }
-
-        const node = createNode(DEFAULT_DECODE_NODE_NAME);
-        node.putOnRight(this);
-        node.moveToBottom();
-
-        this.connectOutput("LATENT", node);
-
-        return node;
-      }
-
-      const createSaveNode = function() {
-        if (!this.hasOutput) {
-          return false;
-        }
-        if (!this.node.outputs.find(e => e.type === "IMAGE")) {
-          return false;
-        }
-
-        const node = createNode(DEFAULT_SAVE_NODE_NAME);
-        node.putOnRight(this);
-        node.moveToBottom();
-
-        this.connectOutput("IMAGE", node);
-
-        return node;
-      }
-
-      const loadNextImage = async function() {
-        self.pkg39.updateIndex();
-        self.pkg39.clearImage();
-        self.pkg39.selectImage();
-        self.pkg39.renderImage();
-        await self.pkg39.renderWorkflow();
-        renderCanvas();
-      }
-
-      const prevConnectedLinks = prevConnectedTargets.map(t => {
-        const node = returnNodeObject(app.graph._nodes.find(e => getPreviousId(e) === t.id));
-        return {
-          node,
-          type: t.type,
-        }
-      }).filter(e => !!e.node);
 
       ;(() => {
         try {
-          // variables
-          const MAIN = returnNodeObject(self);
+          // global variables
+          const MAIN = self;
           const DIR_PATH = selectedImage.dirPath;
           const INDEX = selectedIndex;
-          const IMAGE_PATH = selectedImage.origPath;
-          const IMAGE_NAME = selectedImage.origName;
+          const FILENAME = selectedImage.origName;
+          const FILE_PATH = selectedImage.origPath;
+          const WIDTH = width;
+          const HEIGHT = height;
 
           const STATE = self.pkg39.state;
-          const SEED = getRandomSeed();
 
           const DATE = new Date();
           const YEAR = DATE.getFullYear();
@@ -1151,101 +311,572 @@ function initLoadImageNode() {
           const MINUTES = DATE.getMinutes();
           const SECONDS = DATE.getSeconds();
 
-          // const IS_INHERITED = prevConnectedLinks.length > 0;
+          const SAMPLERS = samplers;
+          const SAMPLER = samplers[samplers.length - 1];
+
           const countImages = self.pkg39.loadedImages.length;
           const countQueues = self.pkg39.countQueues;
           const countLoops = self.pkg39.countLoops;
           const countErrors = self.pkg39.countErrors;
-
-          // set nodeMap to nodeMaps[0]
-          changeNodeMap(0);
-
-          // re-connect load image node
-          for (const { node, type } of prevConnectedLinks) {
-            MAIN.connectOutput(type, node);
-          }
-
-          // methods
-          const flow = (n) => { changeNodeMap(n); };
-          const find = (name) => findNodesByName(name);
-          const findLast = (name) => findNodesByName(name, { reverse: true });
-          const findOne = (name) => findNodeByName(name);
-          const findOneLast = (name) => findNodeByName(name, { reverse: true });
-          const findOneById = (id) => findNodeById(id);
-          const enable = (name) => bypassNodes(Array.isArray(name) ? name : findNodesByName(name), false);
-          const enableOut = () => bypassOutNodes(false);
-          const enableAll = () => bypassAllNodes(false);
-          const disable = (name) => bypassNodes(Array.isArray(name) ? name : findNodesByName(name), true);
-          const disableOut = () => bypassOutNodes(true);
-          const disableAll = () => bypassAllNodes(true);
-          const remove = (name) => removeNodes(Array.isArray(name) ? name : findNodesByName(name));
-          const removeOut = () => removeOutNodes();
-          const removeAll = () => removeAllNodes();
-          const create = (name, values, options) => createNode(name, values, options);
+   
+          // global methods
           const sound = () => playSound();
-          const start = () => { startGeneration(); }
-          const cancel = () => { cancelGeneration(); }
-          const next = () => { loadNextImage(); }
-          const loop = () => { setAutoQueue(); startGeneration(); }
-          const stop = () => { unsetAutoQueue(); } // cancelGeneration();
-          const loadDir = async (dirPath) => {
-            if (typeof(dirPath) === "string") {
-              self.pkg39.resetCounter();
-              await self.pkg39.updateDirPath(dirPath);
-              await self.pkg39.loadImages();
-              self.pkg39.updateIndex(0);
-              self.pkg39.clearImage();
-              self.pkg39.selectImage();
-              self.pkg39.renderImage();
-              await self.pkg39.renderWorkflow();
-              renderCanvas();
-              selectNode(self);
-            } else {
-              throw new Error("loadDir argument must be String.");
-            }
-          }
-          const loadFile = async (filePath) => {
-            if (typeof(filePath) === "string") {
-              self.pkg39.resetCounter();
-              await self.pkg39.loadImageByFilePath(filePath);
-            } else if (Array.isArray(filePath)) {
-              self.pkg39.resetCounter();
-              await self.pkg39.loadImageByFilePath(filePath[0]);
-            } else {
-              throw new Error("loadFile argument must be String.");
-            }
-          }
+          const start = () => startGeneration();
+          const cancel = () => cancelGeneration();
+          const next = () => loadNextImage();
+          const stop = () => unsetAutoQueue();
+          const loadDir = async (dirPath) => await loadDirByPath(dirPath); 
+          const loadFile = async (filePath) => await loadFileByPath(filePath);
+
+          const find = (query) => typeof query === "number" ? getNodeFromRC(query) : getNodeFromVC(query);
+          const findLast = (query) => typeof query === "number" ? getNodeFromRC(query) : getNodeFromVC(query, true);
+          const get = (node) => getWidgetValues(node);
+          const set = (node, values) => setWidgetValues(node, values);
 
           // callbacks
-          let onEnd = null;
           let onError = (err) => { console.error(err); };
 
-          // execute
-          let __command__ = getCommandValue();
-          __command__ = `
+          const commandNodes = app.graph._nodes.filter(e => isCommandNode(e));
+          for (const commandNode of commandNodes) {
+            // command variables
+            const COMMAND_V = getWidgetValues(commandNode);
+            const COMMAND_X = commandNode.pos[0];
+            const COMMAND_Y = commandNode.pos[1];
+            const COMMAND_W = commandNode.size[0];
+            const COMMAND_H = commandNode.size[1];
+            const SEED = getRandomSeed();
+
+            // command methods
+            const load = (srcNode, dstNode, name, replacements) => connectNodes(srcNode, dstNode, name, {
+              x: COMMAND_X + COMMAND_W + DEFAULT_MARGIN_X,
+              y: COMMAND_Y,
+              replacements,
+            });
+
+            eval(`
 try {
-  ${__command__}
+  ${COMMAND_V.command}
 } catch(err) {
   onError(err);
-}`;
-          eval(__command__.trim());
+}
+            `.trim());
 
-          // set callback
-          self.pkg39.onExecuted = onEnd;
+          }
         } catch(err) {
           console.error(err);
         }
+        
+        renderCanvas();
       })();
 
-      renderCanvas();
+      function connectNodes(from, to, name, options) {
+        if (typeof from === "string") {
+          from = getNodeFromVC(from, true);
+        }
+
+        if (typeof to === "number") {
+          to = app.graph._nodes.find(e => isNodeId(e, to));
+        } else if (typeof to === "string") {
+          to = app.graph._nodes.find(e => isNodeType(e, to));
+        }
+
+        if (from.type !== to?.type) {
+          throw new Error(`${from.type} has not been matched with ${to?.type}`);
+        }
+
+        let isInput = false;
+        let originNode;
+        let originSlot;
+
+        if (from.inputs) {
+          const input = from.inputs.find(e => e.name === name);
+          if (input) {
+            isInput = true;
+
+            const link = getInputLink(from, name);
+            const n = link.originNode;
+            const nodes = [n, ...getChildNodes(n)];
+            const newNodes = createNodes(nodes, options);
+
+            if (newNodes.length > 0) {
+              originNode = newNodes[0];
+              if (link.originName) {
+                originSlot = originNode.findOutputSlot(link.originName);
+              } else {
+                originSlot = originNode.findOutputSlotByType(link.type);
+              }
+            }
+          }
+        }
+
+        if (isInput) {
+          if (originNode) {
+            // find input
+            if (to.inputs) {
+              const input = to.inputs.find(e => e.name === name);
+
+              // widget to input
+              if (!input) {
+                const widget = to.widgets?.find(e => e.name === name);
+                if (widget) {
+                  to.convertWidgetToInput(widget);
+                }
+              }
+            }
+
+            const targetId = to.id;
+            const targetSlot = to.findInputSlot(name);
+            originNode.connect(originSlot, targetId, targetSlot);
+          }
+        } else {
+          let value;
+          if (from.widgets) {
+            const widget = from.widgets.find(e => e.name === name);
+            if (widget) {
+              value = widget.value;
+            }
+          }
+          if (to.widgets) {
+            const input = to.inputs?.find(e => e.name === name);
+            const widget = to.widgets.find(e => e.name === name);
+            if (widget) {
+              if (input) {
+                convertInputToWidget(to, widget);
+              }
+              widget.value = value;
+            }
+          }
+        }
+      }
+
+      function loadNextImage() {
+        self.pkg39.updateIndex();
+        self.pkg39.clearImage();
+        self.pkg39.selectImage();
+        self.pkg39.renderImage();
+        self.pkg39.executeCommand();
+      }
+
+      async function loadDirByPath(dirPath) {
+        self.pkg39.resetCounter();
+        await self.pkg39.updateDirPath(dirPath);
+        await self.pkg39.loadImages();
+        self.pkg39.updateIndex(0);
+        self.pkg39.clearImage();
+        self.pkg39.selectImage();
+        self.pkg39.renderImage();
+        self.pkg39.executeCommand();
+        selectNode(self);
+      }
+
+      async function loadFileByPath(filePath) {
+        self.pkg39.resetCounter();
+        await self.pkg39.loadImageByPath(filePath);
+      }
+
+      function matchNode(node, query) {
+        if (typeof query === "number") {
+          return isNodeId(node, query);
+        } else if (typeof query === "string") {
+          return isNodeType(node, query.toLowerCase());
+        } else {  
+          return false;
+        }
+      }
+
+      function isNodeId(node, id) {
+        return node.id === id;
+      }
+
+      function isNodeType(node, name) {
+        return (node.title && node.title.toLowerCase() === name) || 
+          (node.comfyClass && node.comfyClass.replace(/\s/g, "").toLowerCase() === name) ||
+          (node.type && node.type.replace(/\s/g, "").toLowerCase() === name);
+      }
+
+      function getNodeFromRC(id) {
+        return app.graph._nodes.find(e => isNodeId(e, id));
+      }
+
+      function getNodeFromVC(name, reverse) {
+        if (!reverse) {
+          for (let i = 0; i < nodeMap.length; i++) {
+            const nodes = nodeMap[i];
+            for (const n of nodes) {
+              const node = graph._nodes.find(e => e.id === n.id);
+              if (!node) {
+                continue;
+              }
+              if (isNodeType(node, name)) {
+                return graph._nodes.find(e => e.id === node.id);
+              }
+            }
+          }
+        } else {
+          for (let i = nodeMap.length - 1; i >= 0; i--) {
+            const nodes = nodeMap[i];
+            for (const n of nodes) {
+              const node = graph._nodes.find(e => e.id === n.id);
+              if (!node) {
+                continue;
+              }
+              if (isNodeType(node, name)) {
+                return graph._nodes.find(e => e.id === node.id);
+              }
+            }
+          }
+        }
+      }
+
+      function getWidgetValues(node) {
+        let result = {};
+        if (node.widgets) {
+          for (const widget of node.widgets) {
+            result[widget.name] = widget.value;
+          }
+        }
+        return result;
+      }
+
+      function setWidgetValues(node, values) {
+        if (node.widgets) {
+          for (const [key, value] of Object.entries(values)) {
+            const widget = node.widgets.find(e => e.name === key);
+            if (widget) {
+              widget.value = value;
+            }
+          }
+        }
+      }
+
+      function getInputNodes(node) {
+        let result = {};
+        if (node.inputs) {
+          for (const input of node.inputs) {
+            const link = getInputLink(node, input.name);
+            const n = link.originNode;
+            result[input.name] = [n, ...getChildNodes(n)];
+          }
+        }
+        return result;
+      }
+
+      function createNodes(nodes, options = {}) {
+        let x = options.x ?? 0;
+        let y = options.y ?? 0;
+        let replaceNodes = options.replacements ?? [];
+
+        if (Array.isArray(replaceNodes)) {
+          replaceNodes = replaceNodes;
+        } else if (replaceNodes) {
+          replaceNodes = [replaceNodes];
+        }
+
+        // replacements to nodes
+        replaceNodes = replaceNodes.map(e => {
+          if (typeof e === "object") {
+            return e;
+          } else {
+            return app.graph._nodes.find(n => matchNode(n, e));
+          }
+        });
+
+        replaceNodes = replaceNodes.reduce((a, c) => {
+          a.push({
+            isReplaced: false,
+            id: c.id,
+            type: c.type,
+            node: c,
+            inputs: [],
+            outputs: [],
+          });
+          return a;
+        }, []);
+
+        let filteredNodes = [];
+        for (const node of nodes) {
+          const rep = replaceNodes.find(e => !e.isReplaced && e.type === node.type);
+          if (!rep) {
+            filteredNodes.push(node);
+            continue;
+          }
+
+          rep.isReplaced = true;
+
+          const { inputs, outputs } = rep;
+
+          if (node.inputs) {
+            for (const input of node.inputs) {
+              if (!input.link) {
+                continue;
+              }
+
+              const link = graph.links.find(e => e && e.id === input.link);
+              if (!link) {
+                continue;
+              }
+
+              const originId = link.origin_id;
+              const originSlot = link.origin_slot;
+              const targetId = rep.id;
+              const targetSlot = link.target_slot;
+
+              inputs.push([originId,originSlot,targetId,targetSlot]);
+            }
+          }
+
+          if (node.outputs) {
+            for (const output of node.outputs) {
+              if (!output.links) {
+                continue;
+              }
+              for (const linkId of output.links) {
+                if (!linkId) {
+                  continue;
+                }
+
+                const link = graph.links.find(e => e && e.id === linkId);
+                if (!link) {
+                  continue;
+                }
+
+                const originId = rep.id;
+                const originSlot = link.origin_slot;
+                const targetId = link.target_id;
+                const targetSlot = link.target_slot;
+
+                outputs.push([originId,originSlot,targetId,targetSlot]);
+              }
+            }
+          }
+        }
+
+        if (filteredNodes.length > 0) {
+          canvas.selectNodes(filteredNodes);
+          canvas.copyToClipboard();
+  
+          // set position
+          setCanvasPointer(x, y);
+    
+          // paste to original canvas
+          app.canvas.pasteFromClipboard();
+          app.canvas.deselectAllNodes();
+        }
+
+        let newNodes = [];
+        for (const node of filteredNodes) {
+          const newNode = app.graph._nodes.find(e => {
+            return e?.properties?.pkg39 &&
+              e.properties.pkg39.nodeId === node.id && 
+              !e.properties.pkg39.isConnected;
+          });
+
+          if (newNode) {
+            newNodes.push(newNode);
+
+            // set properties
+            newNode.properties.pkg39.isConnected = true;
+          }
+        }
+
+        // re-connect to replacements
+        for (const r of replaceNodes) {
+          const { node, inputs, outputs } = r;
+          
+          for (const input of inputs) {
+            const originNode = newNodes.find(e => e.properties.pkg39.nodeId === input[0]);
+            const originSlot = input[1];
+            const targetId = input[2];
+            const targetSlot = input[3];
+            if (originNode) {
+              originNode.connect(originSlot, targetId, targetSlot);
+            }
+          }
+
+          for (const input of outputs) {
+            const originNode = node;
+            const originSlot = input[1];
+            const targetNode = newNodes.find(e => e.properties.pkg39.nodeId === input[2]);
+            const targetSlot = input[3];
+            if (targetNode) {
+              const targetId = targetNode.id;
+              originNode.connect(originSlot, targetId, targetSlot);
+            }
+          }
+        }
+
+        // align to bottom
+        for (const node of newNodes) {
+          moveToBottom(node);
+        }
+
+        return newNodes;
+      }
+
+      function convertInputToWidget(node, widget) {
+        showWidget(widget);
+        const sz = node.size;
+        node.removeInput(node.inputs.findIndex((i) => i.widget?.name === widget.name));
+      
+        for (const widget of node.widgets) {
+          widget.last_y -= LiteGraph.NODE_SLOT_HEIGHT;
+        }
+      
+        // Restore original size but grow if needed
+        node.setSize([Math.max(sz[0], node.size[0]), Math.max(sz[1], node.size[1])]);
+
+        function showWidget(widget) {
+          widget.type = widget.origType;
+          widget.computeSize = widget.origComputeSize;
+          widget.serializeValue = widget.origSerializeValue;
+        
+          delete widget.origType;
+          delete widget.origComputeSize;
+          delete widget.origSerializeValue;
+        
+          // Hide any linked widgets, e.g. seed+seedControl
+          if (widget.linkedWidgets) {
+            for (const w of widget.linkedWidgets) {
+              showWidget(w);
+            }
+          }
+        }
+      }
+
+      function getInputLink(node, inputName) {
+        const input = node.inputs?.find(e => e.name.toLowerCase() === inputName.toLowerCase());
+        if (!input || !input.link) {
+          return;
+        }
+
+        const inputSlot = node.findInputSlot(input.name);
+        const links = graph.links.filter(e => e);
+        const link = links.find(e => e.target_id === node.id && e.target_slot === inputSlot);
+        if (!link) {
+          return;
+        }
+
+        const originNode = graph._nodes.find(e => e.id === link.origin_id);
+        if (!originNode) {
+          return;
+        }
+
+        const originSlot = link.origin_slot;
+        const originOutput = originNode?.outputs?.[originSlot];
+        const originName = originOutput?.name;
+
+        return {
+          type: link.type,
+          originNode,
+          originSlot,
+          originName,
+          targetNode: node,
+          targetSlot: inputSlot,
+          targetName: input.name,
+        }
+      }
+
+      function putOnRight(anchorNode, targetNode) {
+        targetNode.pos[0] = anchorNode.pos[0] + anchorNode.size[0] + DEFAULT_MARGIN_X;
+        targetNode.pos[1] = anchorNode.pos[1];
+      }
+
+      function putOnBottom(anchorNode, targetNode) {
+        targetNode.pos[0] = anchorNode.pos[0];
+        targetNode.pos[1] = anchorNode.pos[1] + anchorNode.size[1] + DEFAULT_MARGIN_Y;
+      }
+
+      function moveToRight(targetNode) {
+        let isChanged = true;
+        while(isChanged) {
+          isChanged = false;
+          for (const node of app.graph._nodes) {
+            if (node.id === targetNode.id) {
+              continue;
+            }
+            const top = node.pos[1];
+            const bottom = node.pos[1] + node.size[1];
+            const left = node.pos[0];
+            const right = node.pos[0] + node.size[0];
+            const isCollisionX = left <= node.pos[0] + targetNode.size[0] && 
+              right >= targetNode.pos[0];
+            const isCollisionY = top <= node.pos[1] + targetNode.size[1] && 
+              bottom >= targetNode.pos[1];
+
+            if (isCollisionX && isCollisionY) {
+              targetNode.pos[0] = right + DEFAULT_MARGIN_X;
+              isChanged = true;
+            }
+          }
+        }
+      }
+
+      function moveToBottom(targetNode) {
+        let isChanged = true;
+        while(isChanged) {
+          isChanged = false;
+          for (const node of app.graph._nodes) {
+            if (node.id === targetNode.id) {
+              continue;
+            }
+            const top = node.pos[1];
+            const bottom = node.pos[1] + node.size[1];
+            const left = node.pos[0];
+            const right = node.pos[0] + node.size[0];
+            const isCollisionX = left <= targetNode.pos[0] + targetNode.size[0] && 
+              right >= targetNode.pos[0];
+            const isCollisionY = top <= targetNode.pos[1] + targetNode.size[1] && 
+              bottom >= targetNode.pos[1];
+
+            if (isCollisionX && isCollisionY) {
+              targetNode.pos[1] = bottom + DEFAULT_MARGIN_Y;
+              isChanged = true;
+            }
+          }
+        }
+      }
+
+      function getChildNodes(node) {
+        let nodeIds = [];
+        let queue = [node.id];
+        let links = graph.links.filter(e => e);
+        while(queue.length > 0) {
+          const nodeId = queue.shift();
+          for (const l of links) {
+            if (l.target_id === nodeId) {
+              if (nodeIds.indexOf(l.origin_id) === -1) {
+                nodeIds.push(l.origin_id);
+              }
+              if (queue.indexOf(l.origin_id) === -1) {
+                queue.push(l.origin_id);
+              }
+            }
+          }
+        }
+        
+        let nodes = [];
+        for (const id of nodeIds) {
+          const n = graph._nodes.find(e => e.id === id);
+          if (n) {
+            nodes.push(n);
+          }
+        }
+
+        return nodes;
+      }
+
+      function setCanvasPointer(x, y) {
+        app.canvas.graph_mouse[0] = x;
+        app.canvas.graph_mouse[1] = y;
+      }
     }).bind(this);
 
-    this.pkg39.removeWorkflow = (function() {
+    this.pkg39.clearWorkflow = (function() {
       try {
         const nodes = [];
         for (const n of app.graph._nodes) {
-          const loaderId = getLoaderId(n);
-          if (loaderId && loaderId === this.id) {
+          const loadId = getLoadId(n);
+          if (loadId && loadId === this.id) {
             nodes.push(n);
           } 
         }
@@ -1376,7 +1007,7 @@ try {
 
       for (let i = app.graph._nodes.length - 1; i >= 0; i--) {
         const n = app.graph._nodes[i];
-        if (getLoaderId(n) === id) {
+        if (getLoadId(n) === id) {
           app.graph.remove(n);
         }
       }
@@ -1408,8 +1039,7 @@ try {
         self.pkg39.clearImage();
         self.pkg39.selectImage();
         self.pkg39.renderImage();
-        await self.pkg39.renderWorkflow();
-        renderCanvas();
+        self.pkg39.executeCommand();
         selectNode(self);
       }
     }
@@ -1430,14 +1060,13 @@ try {
       if (this.timer) {
         clearTimeout(this.timer);
       }
-      this.timer = setTimeout(async () => {
+      this.timer = setTimeout(() => {
         self.pkg39.resetCounter();
         self.pkg39.updateIndex(self.pkg39.getIndex());
         self.pkg39.clearImage();
         self.pkg39.selectImage();
         self.pkg39.renderImage();
-        await self.pkg39.renderWorkflow();
-        renderCanvas();
+        self.pkg39.executeCommand();
         selectNode(self);
       }, 256);
     }
@@ -1446,22 +1075,14 @@ try {
   }
 }
 
-function getCommandValue() {
-  for (const node of app.graph._nodes) {
-    if (isCommandNode(node)) {
-      const v = node.widgets?.[0].value;
-      if (v && v !== "") {
-        return v;
-      }
-    }
+async function executedHandler({ detail }) {
+  if (!detail?.output?.images) {
+    return;
   }
-  return "";
-}
 
-async function promptQueuedHandler() {
-  let isChanged = false;
-  let isAutoQueue = isAutoQueueMode();
-  let isErrored = isErrorOccurred();
+  // const images = detail.output.images.map(e => {
+  //   return parseObjectURL(e).filePath;
+  // });
 
   for (const node of app.graph._nodes) {
     if (isLoadImageNode(node)) {
@@ -1470,39 +1091,11 @@ async function promptQueuedHandler() {
       node.pkg39.updateIndex();
       const currIndex = node.pkg39.getIndex();
       if (prevIndex !== currIndex && countImages > 0) {
-        isChanged = true;
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
-        await node.pkg39.renderWorkflow();
-        renderCanvas();
+        node.pkg39.executeCommand();
       }
-    }
-  }
-
-  // ignore ComfyUI error messages
-  if (isAutoQueue && isErrored && isChanged) {
-    hideError();
-    setTimeout(() => {
-      if (getQueueSize() < 1) {
-        startGeneration();
-      }
-    }, 1024);
-  }
-}
-
-async function executedHandler({ detail }) {
-  if (!detail?.output?.images) {
-    return;
-  }
-
-  const images = detail.output.images.map(e => {
-    return parseObjectURL(e).filePath;
-  });
-
-  for (const node of app.graph._nodes) {
-    if (isLoadImageNode(node) && typeof node.pkg39.onExecuted === "function") {
-      await node.pkg39.onExecuted(images);
     }
   }
 }
@@ -1533,8 +1126,7 @@ async function keyDownEvent(e) {
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
-    await this.pkg39.renderWorkflow();
-    renderCanvas();
+    this.pkg39.executeCommand();
     selectNode(this);
   } else if (key === "ArrowRight") {
     e.preventDefault();
@@ -1544,8 +1136,7 @@ async function keyDownEvent(e) {
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
-    await this.pkg39.renderWorkflow();
-    renderCanvas();
+    this.pkg39.executeCommand();
     selectNode(this);
   } else if ((key === "r" && (ctrlKey || metaKey)) || key === "F5") {
     e.preventDefault();
@@ -1556,16 +1147,11 @@ async function keyDownEvent(e) {
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
-    await this.pkg39.renderWorkflow();
-    renderCanvas();
+    this.pkg39.executeCommand();
     selectNode(this);
   } 
 }
 
-// after start a new queue
-api.addEventListener("promptQueued", promptQueuedHandler);
-
-// after image generated
 api.addEventListener("executed", executedHandler);
 
 app.registerExtension({
@@ -1582,8 +1168,7 @@ app.registerExtension({
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
-        await node.pkg39.renderWorkflow();
-        renderCanvas();
+        node.pkg39.executeCommand();
 
         node.pkg39.DIR_PATH.isCallbackEnabled = true;
         node.pkg39.INDEX.isCallbackEnabled = true;
@@ -1607,8 +1192,7 @@ app.registerExtension({
           node.pkg39.clearImage();
           node.pkg39.selectImage();
           node.pkg39.renderImage();
-          await node.pkg39.renderWorkflow();
-          renderCanvas();
+          node.pkg39.executeCommand();
 
           node.pkg39.DIR_PATH.isCallbackEnabled = true;
           node.pkg39.INDEX.isCallbackEnabled = true;

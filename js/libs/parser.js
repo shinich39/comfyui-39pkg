@@ -87,6 +87,10 @@ function getNodeMap({ workflow, sampler }) {
         return {
           id: l.id ?? l[0],
           type: l.type ?? l[5],
+          origin_id: l.origin_id ?? l[1],
+          origin_slot: l.origin_slot ?? l[2],
+          target_id: l.target_id ?? l[3],
+          target_slot: l.target_slot ?? l[4],
           originNode: w.nodes.find((e) => e.id === (l.origin_id ?? l[1])),
           originSlot: (l.origin_slot ?? l[2]),
           targetNode: w.nodes.find((e) => e.id === (l.target_id ?? l[3])),

@@ -33,12 +33,12 @@ function isPkg39Node(node) {
   return typeof node?.properties?.pkg39 === "object";
 }
 
-function getLoaderId(node) {
-  return node?.properties?.pkg39?.loaderId;
+function getLoadId(node) {
+  return node?.properties?.pkg39?.loadId;
 }
 
-function getPreviousId(node) {
-  return node?.properties?.pkg39?.previousId;
+function getPrevNodeId(node) {
+  return node?.properties?.pkg39?.nodeId;
 }
 
 function getRandomSeed() {
@@ -47,7 +47,6 @@ function getRandomSeed() {
   let range = (max - min) / (STEPS_OF_SEED / 10);
   return Math.floor(Math.random() * range) * (STEPS_OF_SEED / 10) + min;
 }
-
 
 function showError(err) {
   console.error(err);
@@ -187,10 +186,11 @@ export {
   getImageURL,
   isLoadImageNode,
   isCommandNode,
-  getLoaderId,
-  getPreviousId,
+  getLoadId,
+  getPrevNodeId,
   isPkg39Node,
   getRandomSeed,
+  showError,
   hideError,
   isErrorOccurred,
   isAutoQueueMode,

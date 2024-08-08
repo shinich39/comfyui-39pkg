@@ -4,21 +4,20 @@ Automation for generating image from image.
 
 ## Features
 
-- Create automation img2img flow with Any custom nodes.  
+- Create automation img2img flow with embedded workflow.  
 - Quick inpainting.  
 
 ## Nodes  
-Add node > pkg39  
-Search "39"  
+Add node > pkg39 or Search "39"  
 
 - Random: Shuffle connected inputs each queue.  
 - Bind key: Add keybindings to textarea.  
-- Load image: Load image with workflow.
-- Command: Control loaded workflow using javascript.   
+- Load image: Load image in sequentially.
+- Command: Control loaded image using javascript.   
 
 ## Usage
 
-### Added menu to Save Image node  
+### Added menu to Save Image node and Preview Image node  
 - Send to pkg39  
 
 Selected image copied to "/ComfyUI/pkg39_images" directory.  
@@ -29,8 +28,7 @@ Load selected image at the "Load image" node.
 
 ### Load image node  
 Enter dir_path and index to load image.  
-When image loaded, import nodes from embedded workflow then place at right side of "Load image" node.  
-Controls\(while selecting a Load image node\):  
+Controls \(while selecting the Load image node\):  
 - F5 or Ctrl + r: Reload images.  
 - Left, Right: Change index.  
 - -, =: Change canvas zoom.  
@@ -45,108 +43,33 @@ Controls\(while selecting a Load image node\):
 - Mouse move while press space bar: Move canvas.  
 
 ### Command node  
-Only one command node will be active.  
-Command execute when starting each queue, change index, change command or load image.  
-Copy and paste to commnad node and use it after customize.  
+The node can load the embedded workflow in loaded image by javascript.  
+Copy and paste to textarea on commnad node and use it after customize.  
 
-- Hi-Res fix images in directory  
-
-Set mode to "increment" on Load image node.  
-Set auto queue mode to "instant"  
-
+- Find node
 ```js
-var SCALE_BY = 2;
-var STEPS = 30;
-var CFG = 8;
-var SAMPLER_NAME = "euler";
-var SCHEDULER = "simple";
-var DENOISE = 0.5;
-
-remove("EmptyLatentImage");
-remove("PreviewImage");
-remove("SaveImage");
-removeOut();
-
-var vaeEncode = create("VAEEncode");
-var saveImage = create("SaveImage");
-var vaeDecode = findOneLast("VAEDecode");
-var sampler = findOne("KSampler");
-var ckpt = findOne("Load Checkpoint");
-
-vaeEncode.connectInput("pixels", MAIN);
-vaeEncode.connectInput("vae", ckpt);
-
-saveImage.connectInput("images", vaeDecode);
-saveImage.setValue("filename_prefix", IMAGE_NAME);
-
-// new sampler inherit values and connections from sampler
-var [newUpscaler, newSampler] = sampler.hires(SCALE_BY);
-newUpscaler.connectInput("samples", vaeEncode);
-newSampler.setValue("seed", SEED); // random seed
-newSampler.setValue("steps", STEPS);
-newSampler.setValue("cfg", CFG);
-newSampler.setValue("sampler_name", SAMPLER_NAME);
-newSampler.setValue("scheduler", SCHEDULER);
-newSampler.setValue("denoise", DENOISE);
-sampler.remove();
+var srcNode1 = find("TITLE|TYPE"); // in virtual workflow
+var srcNode2 = findLast("TITLE|TYPE"); // in virtual workflow
+var dstNode = find(1); // in real workflow
 ```
 
-- Single image loop inpaiting  
-
-Set mode to "fixed" on Load image node.  
-
+- Load nodes  
 ```js
-var STEPS = 30;
-var CFG = 8;
-var SAMPLER_NAME = "euler";
-var SCHEDULER = "normal";
-var DENOISE = 0.7;
+var srcSampler = SAMPLER;
+var dstSampler = find(2); // KSampler node in real workflow
+var replaceNodes = [1]; // Load Checkpoint node id in real workflow
+load(srcSampler, dstSampler, "positive", replaceNodes);
+load(srcSampler, dstSampler, "negative", replaceNodes);
+load(srcSampler, dstSampler, "latent_image");
+```
 
-remove("EmptyLatentImage");
-remove("PreviewImage");
-remove("SaveImage");
-remove("LatentUpscale");
-remove("VAEEncode");
-remove("SetLatentNoiseMask");
-remove("InvertMask");
-remove("ImageCompositeMasked");
-removeOut();
-
-var vaeEncode = create("VAEEncode");
-var setLatentNoiseMask = create("SetLatentNoiseMask");
-var invertMask = create("InvertMask");
-var imageComposite = create("ImageCompositeMasked");
-var saveImage = create("SaveImage");
-var ckpt = findOne("Load Checkpoint");
-var vaeDecode = findOneLast("VAEDecode");
-var sampler = findOneLast("KSampler");
-
-vaeEncode.connectInput("pixels", MAIN);
-vaeEncode.connectInput("vae", ckpt);
-
-setLatentNoiseMask.connectInput("mask", MAIN);
-setLatentNoiseMask.connectInput("samples", vaeEncode);
-
-sampler.connectInput("model", ckpt);
-sampler.connectInput("latent", setLatentNoiseMask);
-sampler.setValue("seed", SEED); // random seed
-sampler.setValue("steps", STEPS);
-sampler.setValue("cfg", CFG);
-// sampler.setValue("sampler_name", SAMPLER_NAME);
-sampler.setValue("scheduler", SCHEDULER);
-sampler.setValue("denoise", DENOISE);
-
-invertMask.connectInput("mask", MAIN);
-
-imageComposite.connectInput("mask", invertMask);
-imageComposite.connectInput("source", MAIN);
-imageComposite.connectInput("destination", vaeDecode);
-
-saveImage.connectInput("images", imageComposite);
-saveImage.setValue("filename_prefix", IMAGE_NAME.split("_")[0]);
-
-// load inpainted image
-onEnd = async (images) => await loadFile(images[0]);
+- Load widget values  
+```js
+var srcSampler = SAMPLER;
+var dstSampler = find(2);
+var widgetValues = get(srcSampler);
+set(srcSampler, widgetValues);
+set(dstSampler, { seed: SEED }); // random seed
 ```
 
 - Stop after run 5 (In auto queue mode)  
@@ -154,19 +77,12 @@ onEnd = async (images) => await loadFile(images[0]);
 if (countQueues >= 5) { stop(); }
 ```
 
-- Play sound at the start generation
+- Play sound at the end of generation
 ```js
 sound();
 ```
 
-- Play sound at the end of generation
-```js
-onEnd = () => { sound(); }
-```
-
-
-More methods are written in the commnad node.  
-
+- More methods are written in the commnad node.  
 
 ## References
 

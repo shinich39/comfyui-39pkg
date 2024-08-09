@@ -29,8 +29,6 @@ import {
   parseObjectURL,
 } from "./pkg39-utils.js";
 
-console.log(app)
-
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
@@ -868,15 +866,18 @@ function initCommandNode() {
       .filter(e => e && !isCommandNode(e) && !isPkg39Node(e))
       .sort((a, b) => a.id - b.id);
 
+    text += `// You can use javascript code here!\n\n`;
     for (const node of nodes) {
       const nodeId = node.id;
       const nodeTitle = node.title;
       text += `var n${nodeId} = find(${nodeId}); // ${nodeTitle}\n`;
     }
 
-    text += `\n// You can use javascript code here!`;
-    text += `\n\n// ### Variables`;
+    
+    text += `\n// ### Variables`;
     text += `\n// MAIN => Node: Load image node.`;
+    text += `\n// SAMPLERS => Array: All sampler nodes in flow.`;
+    text += `\n// SAMPLER => Node: Last sampler node.`;
     text += `\n// DIR_PATH => String: Directory path of loaded image.`;
     text += `\n// INDEX => Number: Index of loaded image.`;
     text += `\n// FILE_PATH => String: Path of loaded image.`;
@@ -884,19 +885,16 @@ function initCommandNode() {
     text += `\n// WIDTH => Number: Width of loaded image.`;
     text += `\n// HEIGHT => Number: Height of loaded image.`;
     text += `\n// SEED => Number: Generated random seed each command node.`;
-    text += `\n// STATE => Object: Store values and prevent refresh before image changed by user.`;
     text += `\n// YEAR => Number`;
     text += `\n// MONTH => Number`;
     text += `\n// DAY => Number`;
     text += `\n// HOURS => Number`;
     text += `\n// MINUTES => Number`;
     text += `\n// SECONDS => Number`;
-    text += `\n// SAMPLERS => Array: All sampler nodes in flow.`;
-    text += `\n// SAMPLER => Node: Last sampler node.`;
     text += `\n// countImages => Number: Number of images.`;
     text += `\n// countQueues => Number: Number of queues.`;
     text += `\n// countLoops => Number: Number of loops.`;
-    text += `\n\n// ### Methods`;
+    text += `\n//\n// ### Methods`;
     text += `\n// stop(): Disable auto queue mode.`;
     text += `\n// sound(): Play the notification sound.`;
     text += `\n// loadDir(dirPath) => Promise: Change dir_path value and load images in directory.`;

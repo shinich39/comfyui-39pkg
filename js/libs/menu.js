@@ -40,13 +40,14 @@ function isLoadImageNodeExists() {
   return false;
 }
 
-function getLoadImageNode() {
+function getLoadImageNodes() {
+  let nodes = [];
   for (const node of app.graph._nodes) {
     if (isLoadImageNode(node)) {
-      return node;
+      nodes.push(node);
     }
   }
-  return;
+  return nodes;
 }
 
 async function saveImage(filePath) {
@@ -82,7 +83,7 @@ async function sendToPkg39() {
   }
 }
 
-async function sendToLoadImageNode() {
+async function sendToLoadImageNode(node) {
   if (this.imgs) {
     // If this node has images then we add an open in new tab item
     let img;
@@ -97,7 +98,6 @@ async function sendToLoadImageNode() {
       const url = new URL(img.src);
       const obj = parseURL(url);
       const filePath = parseObjectURL(obj).filePath;
-      const node = getLoadImageNode();
       await node.pkg39.loadImageByPath(filePath);
     }
   }
@@ -122,8 +122,15 @@ app.registerExtension({
           }, {
             content: "Send to Load image",
             disabled: !isLoadImageNodeExists(),
-            callback: () => {
-              sendToLoadImageNode.apply(this);
+            submenu: {
+              options: getLoadImageNodes().map((node) => {
+                return {
+                  content: `#${node.id}`,
+                  callback: () => {
+                    sendToLoadImageNode.apply(this, [node]);
+                  },
+                }
+              }),
             },
           }
         ];

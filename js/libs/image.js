@@ -100,11 +100,18 @@ function initLoadImageNode() {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
+      if (!filePath || filePath.trim() == "") {
+        return;
+      }
 
       filePath = filePath.replace(/[\\\/]+/g, "/");
       let dirPath = filePath.replace(/\/[^\/]+$/, "/");
       let basename = filePath.replace(dirPath, "");
       let filename = basename.replace(/.[^.]+$/, "");
+
+      if (this.pkg39.DIR_PATH.value === dirPath && this.pkg39.FILENAME.value === filename) {
+        throw new Error(`Image already loaded: ${dirPath}/${filename}`);
+      }
 
       this.pkg39.resetCounter();
       await this.pkg39.updateDirPath(dirPath);
@@ -122,7 +129,7 @@ function initLoadImageNode() {
       this.pkg39.clearImage();
       this.pkg39.selectImage();
       this.pkg39.renderImage();
-      await this.pkg39.executeCommands();
+      await this.pkg39.executeCommands("changeIndex");
       selectNode(this);
     }).bind(this);
 
@@ -177,7 +184,7 @@ function initLoadImageNode() {
       }
     }).bind(this);
 
-    this.pkg39.executeCommands = (async function() {
+    this.pkg39.executeCommands = (async function(type) {
       if (!this.pkg39.isInitialized) {
         throw new Error("pkg39 has not been initialized.");
       }
@@ -192,7 +199,7 @@ function initLoadImageNode() {
       for (const node of nodes) {
         if (node.pkg39?.render) {
           node.pkg39.clear();
-          await node.pkg39.render();
+          await node.pkg39.render(type);
         }
       }
       renderCanvas();
@@ -315,6 +322,9 @@ function initLoadImageNode() {
         if (!this.pkg39.isInitialized) {
           throw new Error("pkg39 has not been initialized.");
         }
+        if (!app.graph.links) {
+          return [];
+        }
 
         const output = this.outputs.find(e => e.name === "COMMAND");
         const outputLinks = output.links;
@@ -351,7 +361,7 @@ function initLoadImageNode() {
         self.pkg39.clearImage();
         self.pkg39.selectImage();
         self.pkg39.renderImage();
-        await self.pkg39.executeCommands();
+        await self.pkg39.executeCommands("changeDirPath");
         selectNode(self);
       }
     }
@@ -378,7 +388,7 @@ function initLoadImageNode() {
         self.pkg39.clearImage();
         self.pkg39.selectImage();
         self.pkg39.renderImage();
-        await self.pkg39.executeCommands();
+        await self.pkg39.executeCommands("changeIndex");
         selectNode(self);
       }, 256);
     }
@@ -404,8 +414,8 @@ async function generatedHandler({ detail }) {
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
-        await node.pkg39.executeCommands();
       }
+      await node.pkg39.executeCommands("executed");
     }
   }
 }
@@ -440,7 +450,7 @@ async function keyDownEvent(e) {
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
-    await this.pkg39.executeCommands();
+    await this.pkg39.executeCommands("changeIndex");
     selectNode(this);
   } else if ((key === "r" && (ctrlKey || metaKey)) || key === "F5") {
     e.preventDefault();
@@ -451,13 +461,13 @@ async function keyDownEvent(e) {
     this.pkg39.clearImage();
     this.pkg39.selectImage();
     this.pkg39.renderImage();
-    await this.pkg39.executeCommands();
+    await this.pkg39.executeCommands("refresh");
     selectNode(this);
   } 
 }
 
-api.addEventListener("promptQueued", () => console.log("promptQueued"));
-// api.addEventListener("executed", executedHandler);
+// api.addEventListener("promptQueued", () => {});
+// api.addEventListener("executed", () => {});
 api.addEventListener("executing", generatedHandler);
 
 app.registerExtension({
@@ -474,7 +484,7 @@ app.registerExtension({
         node.pkg39.clearImage();
         node.pkg39.selectImage();
         node.pkg39.renderImage();
-        // await node.pkg39.executeCommands();
+        await node.pkg39.executeCommands("initialize");
 
         node.pkg39.DIR_PATH.isCallbackEnabled = true;
         node.pkg39.INDEX.isCallbackEnabled = true;
@@ -498,7 +508,7 @@ app.registerExtension({
           node.pkg39.clearImage();
           node.pkg39.selectImage();
           node.pkg39.renderImage();
-          // await node.pkg39.executeCommands();
+          // await node.pkg39.executeCommands("initialize");
 
           node.pkg39.DIR_PATH.isCallbackEnabled = true;
           node.pkg39.INDEX.isCallbackEnabled = true;

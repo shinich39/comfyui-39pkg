@@ -49,11 +49,11 @@ Copy and paste to textarea on commnad node and use it after customize.
 
 - Find node
 ```js
-// string is search for virtual workflow
-var srcNode1 = find("TITLE|TYPE");
-var srcNode2 = findLast("TITLE|TYPE");
+// argument string is search in virtual workflow
+var srcNode = find("TITLE|TYPE");
+var srcNode = findLast("TITLE|TYPE");
 
-// number is earch for actual workflow
+// argument number is search in actual workflow
 var dstNode = find(1);
 ```
 
@@ -65,7 +65,8 @@ var dstSampler = find(2); // KSampler node in actual workflow
 var replaceNodes = [1]; // ID of Load Checkpoint node in actual workflow
 load(srcSampler, dstSampler, "positive", replaceNodes);
 load(srcSampler, dstSampler, "negative", replaceNodes);
-load(srcSampler, dstSampler, "latent_image");
+load(srcSampler, 2, "latent_image");
+load("KSampler", dstSampler, "cfg");
 ```
 
 - Load values  

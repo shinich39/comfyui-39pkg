@@ -29,6 +29,8 @@ import {
   parseObjectURL,
 } from "./pkg39-utils.js";
 
+console.log(app)
+
 const DEFAULT_NODE_COLORS = LGraphCanvas.node_colors;
 const DEFAULT_MARGIN_X = 30;
 const DEFAULT_MARGIN_Y = 60;
@@ -56,7 +58,6 @@ function initCommandNode() {
       console.error(err);
       return;
     }
-
   }).bind(this);
 
   this.pkg39.clear = (function() {
@@ -78,32 +79,30 @@ function initCommandNode() {
     }
   }).bind(this);
 
-  this.pkg39.render = (async function() {
+  this.pkg39.render = (async function(type) {
     const COMMAND = this.widgets?.find(e => e.name === "text")?.value;
     if (!COMMAND || COMMAND.trim() === "") {
       return;
     }
 
     const loader = this.pkg39.getNode();
-    if (!loader) {
-      return;
-    }
-    if (!loader.pkg39.isInitialized) {
-      throw new Error("pkg39 has not been initialized.");
-    }
-    if (!loader.pkg39.selectedImage) {
+    if (!loader || !loader.pkg39.isInitialized || !loader.pkg39.selectedImage) {
       return;
     }
 
     let { selectedImage, selectedIndex } = loader.pkg39;
-    if (!selectedImage || !selectedImage.workflow) {
+    if (!selectedImage.workflow) {
       return;
     }
 
     let { width, height, prompt, workflow } = selectedImage;
     let samplerNodes = getSamplerNodes({ workflow, prompt });
 
-    // create virtual canvas
+    // remove command nodes in workflow
+    removeNodesFromWorkflow(workflow);
+
+    // create virtual graph and virtual canvas
+    // this methods call node.onConnectionsChange
     let graph = new LGraph(workflow);
     let canvas = new LGraphCanvas(null, graph, { skip_events: true, skip_render: true });
 
@@ -190,8 +189,6 @@ function initCommandNode() {
         const WIDTH = width;
         const HEIGHT = height;
 
-        const STATE = loader.pkg39.state;
-
         const DATE = new Date();
         const YEAR = DATE.getFullYear();
         const MONTH = DATE.getMonth() + 1;
@@ -203,23 +200,16 @@ function initCommandNode() {
         const SAMPLERS = samplers;
         const SAMPLER = samplers[samplers.length - 1];
 
+        const STATE = loader.pkg39.state;
         const countImages = loader.pkg39.loadedImages.length;
         const countQueues = loader.pkg39.countQueues;
         const countLoops = loader.pkg39.countLoops;
         const countErrors = loader.pkg39.countErrors;
  
         // global methods
-        const sound = () => playSound();
-        const start = () => startGeneration();
-        const cancel = () => cancelGeneration();
-        const next = async () => await loadNextImage.apply(loader);
         const stop = () => unsetAutoQueue();
-        const loadDir = async (dirPath) => await loadDirByPath.apply(loader, [dirPath]);
-        const loadFile = async (filePath) => await loadFileByPath.apply(loader, [filePath]);
-        const loadImage = async (node) => await loadFileByNode.apply(loader, [node]);
-
-        const find = (query) => typeof query === "number" ? getActualNodeById(query) : getVirtualNodeByName(query);
-        const findLast = (query) => typeof query === "number" ? getActualNodeById(query) : getVirtualNodeByName(query, true);
+        const find = (query) => typeof query === "number" ? getActualNode(query) : getVirtualNode(query);
+        const findLast = (query) => typeof query === "number" ? getActualNode(query) : getVirtualNode(query, true);
         const get = (node) => getWidgetValues(node);
         const set = (node, values) => setWidgetValues(node, values);
         const load = (srcNode, dstNode, name, replacements) => connectNodes(srcNode, dstNode, name, {
@@ -227,6 +217,13 @@ function initCommandNode() {
           y: COMMAND_Y,
           replacements,
         });
+
+        // this methods available after "executed"
+        const sound = () => playNotification();
+        const next = async () => await loadNextImage.apply(loader);
+        const loadDir = async (dirPath) => await loadDirByPath.apply(loader, [dirPath]);
+        const loadFile = async (filePath) => await loadFileByPath.apply(loader, [filePath]);
+        const loadImage = async (node) => await loadFileByNode.apply(loader, [node]);
 
         // callbacks
         let onError = (err) => { console.error(err); };
@@ -246,28 +243,32 @@ function initCommandNode() {
       renderCanvas();
     })();
 
-    function connectNodes(from, to, name, options) {
-      from = toVirtualNode(from, true);
-      to = toActualNode(to);
-
-      if (from.type !== to?.type) {
-        throw new Error(`${from.type} has not been matched with ${to?.type}`);
+    function connectNodes(src, dst, name, options) {
+      src = getVirtualNode(src, true);
+      dst = getActualNode(dst);
+      if (!src) {
+        throw new Error("Source node not found.");
+      }
+      if (!dst) {
+        throw new Error("Destination node not found.");
+      }
+      if (src.type !== dst.type) {
+        throw new Error(`${src.type} has not been matched with ${dst.type}`);
       }
 
       let isInput = false;
       let originNode;
       let originSlot;
 
-      if (from.inputs) {
-        const input = from.inputs.find(e => e.name === name);
+      if (src.inputs) {
+        const input = src.inputs.find(e => e.name === name);
         if (input) {
           isInput = true;
 
-          const link = getInputLink(from, name);
+          const link = getInputLink(src, name);
           const n = link.originNode;
           const nodes = [n, ...getChildNodes(n)];
           const newNodes = createNodes(nodes, options);
-
           if (newNodes.length > 0) {
             originNode = newNodes[0];
             if (link.originName) {
@@ -282,36 +283,36 @@ function initCommandNode() {
       if (isInput) {
         if (originNode) {
           // find input
-          if (to.inputs) {
-            const input = to.inputs.find(e => e.name === name);
+          if (dst.inputs) {
+            const input = dst.inputs.find(e => e.name === name);
 
             // widget to input
             if (!input) {
-              const widget = to.widgets?.find(e => e.name === name);
+              const widget = dst.widgets?.find(e => e.name === name);
               if (widget) {
-                to.convertWidgetToInput(widget);
+                dst.convertWidgetToInput(widget);
               }
             }
           }
 
-          const targetId = to.id;
-          const targetSlot = to.findInputSlot(name);
+          const targetId = dst.id;
+          const targetSlot = dst.findInputSlot(name);
           originNode.connect(originSlot, targetId, targetSlot);
         }
       } else {
         let value;
-        if (from.widgets) {
-          const widget = from.widgets.find(e => e.name === name);
+        if (src.widgets) {
+          const widget = src.widgets.find(e => e.name === name);
           if (widget) {
             value = widget.value;
           }
         }
-        if (to.widgets) {
-          const input = to.inputs?.find(e => e.name === name);
-          const widget = to.widgets.find(e => e.name === name);
+        if (dst.widgets) {
+          const input = dst.inputs?.find(e => e.name === name);
+          const widget = dst.widgets.find(e => e.name === name);
           if (widget) {
             if (input) {
-              convertInputToWidget(to, widget);
+              convertInputToWidget(dst, widget);
             }
             widget.value = value;
           }
@@ -319,31 +320,75 @@ function initCommandNode() {
       }
     }
 
-    function toVirtualNode(e, reverse) {
-      if (typeof e === "object") {
-        return e;
+    function getVirtualNode(any, reverse) {
+      if (typeof any === "object") {
+        return any;
+      }
+      if (!reverse) {
+        for (let i = 0; i < nodeMap.length; i++) {
+          const nodes = nodeMap[i];
+          for (const n of nodes) {
+            const node = graph._nodes.find(e => e.id === n.id);
+            if (!node) {
+              continue;
+            }
+            if (matchNode(node, any)) {
+              return node;
+            }
+          }
+        }
       } else {
-        return getVirtualNodeByName(e, reverse);
+        for (let i = nodeMap.length - 1; i >= 0; i--) {
+          const nodes = nodeMap[i];
+          for (const n of nodes) {
+            const node = graph._nodes.find(e => e.id === n.id);
+            if (!node) {
+              continue;
+            }
+            if (matchNode(node, any)) {
+              return node;
+            }
+          }
+        }
       }
     }
 
-    function toActualNode(e) {
-      if (typeof e === "object") {
-        return e;
-      } else {
-        return app.graph._nodes.find(n => matchNode(n, e));
+    function getActualNode(any) {
+      if (typeof any === "number") {
+        return app.graph._nodes.find(e => isNodeId(e, any));
+      } else if (typeof any === "string") {
+        return app.graph._nodes.find(e => matchNode(e, any));
+      } else if (typeof any === "object") {
+        return any;
       }
+    }
+
+    function playNotification() {
+      if (["executed"].indexOf(type) === -1) {
+        console.error(`sound() has been blocked by type: ${type}`);
+        return;
+      }
+      playSound();
     }
 
     async function loadNextImage() {
+      if (["executed"].indexOf(type) === -1) {
+        console.error(`next() has been blocked by type: ${type}`);
+        return;
+      }
+      this.pkg39.resetCounter();
       this.pkg39.updateIndex();
       this.pkg39.clearImage();
       this.pkg39.selectImage();
       this.pkg39.renderImage();
-      await this.pkg39.executeCommands();
+      await this.pkg39.executeCommands("changeIndex");
     }
 
     async function loadDirByPath(dirPath) {
+      if (["executed"].indexOf(type) === -1) {
+        console.error(`loadDir() has been blocked by type: ${type}`);
+        return;
+      }
       this.pkg39.resetCounter();
       await this.pkg39.updateDirPath(dirPath);
       await this.pkg39.loadImages();
@@ -351,11 +396,15 @@ function initCommandNode() {
       this.pkg39.clearImage();
       this.pkg39.selectImage();
       this.pkg39.renderImage();
-      await this.pkg39.executeCommands();
+      await this.pkg39.executeCommands("changeDirPath");
       selectNode(this);
     }
 
     async function loadFileByPath(filePath) {
+      if (["executed"].indexOf(type) === -1) {
+        console.error(`loadFile() has been blocked by type: ${type}`);
+        return;
+      }
       if (filePath && this.pkg39.loadedImagePath !== filePath) {
         this.pkg39.loadedImagePath = filePath;
         await this.pkg39.loadImageByPath(filePath);
@@ -363,12 +412,15 @@ function initCommandNode() {
     }
 
     async function loadFileByNode(node, index = 0) {
-      node = toActualNode(node);
+      if (["executed"].indexOf(type) === -1) {
+        console.error(`loadImage() has been blocked by type: ${type}`);
+        return;
+      }
+      node = getActualNode(node);
       if (node && Array.isArray(node.images) && node.images[index]) {
         const image = node.images[index];
         const { filePath } = parseObjectURL(image);
-        if (filePath && this.pkg39.loadedImagePath !== filePath) {
-          this.pkg39.loadedImagePath = filePath;
+        if (filePath) {
           await this.pkg39.loadImageByPath(filePath);
         }
       }
@@ -392,40 +444,6 @@ function initCommandNode() {
       return (node.title && node.title.toLowerCase() === name) || 
         (node.comfyClass && node.comfyClass.replace(/\s/g, "").toLowerCase() === name) ||
         (node.type && node.type.replace(/\s/g, "").toLowerCase() === name);
-    }
-
-    function getActualNodeById(id) {
-      return app.graph._nodes.find(e => isNodeId(e, id));
-    }
-
-    function getVirtualNodeByName(name, reverse) {
-      if (!reverse) {
-        for (let i = 0; i < nodeMap.length; i++) {
-          const nodes = nodeMap[i];
-          for (const n of nodes) {
-            const node = graph._nodes.find(e => e.id === n.id);
-            if (!node) {
-              continue;
-            }
-            if (isNodeType(node, name)) {
-              return graph._nodes.find(e => e.id === node.id);
-            }
-          }
-        }
-      } else {
-        for (let i = nodeMap.length - 1; i >= 0; i--) {
-          const nodes = nodeMap[i];
-          for (const n of nodes) {
-            const node = graph._nodes.find(e => e.id === n.id);
-            if (!node) {
-              continue;
-            }
-            if (isNodeType(node, name)) {
-              return graph._nodes.find(e => e.id === node.id);
-            }
-          }
-        }
-      }
     }
 
     function getWidgetValues(node) {
@@ -473,7 +491,9 @@ function initCommandNode() {
       }
 
       // replacements to nodes
-      replaceNodes = replaceNodes.map(toActualNode);
+      replaceNodes = replaceNodes
+        .map(getActualNode)
+        .filter(e => !!e);
 
       replaceNodes = replaceNodes.reduce((a, c) => {
         a.push({
@@ -763,6 +783,79 @@ function initCommandNode() {
       app.canvas.graph_mouse[0] = x;
       app.canvas.graph_mouse[1] = y;
     }
+
+    function removeNodesFromWorkflow(workflow) {
+      let removedLinks = [];
+      let nodeIds = [];
+      for (let i = workflow.nodes.length - 1; i >= 0; i--) {
+        const node = workflow.nodes[i];
+        // remove nodes
+
+        // if (node.type === "LoadImage39") {
+        //   workflow.nodes.splice(i, 1);
+        //   nodeIds.push(node.id);
+        // } 
+        
+        if (node.type === "Command39") {
+          // command does not have input and outputs
+          workflow.nodes.splice(i, 1);
+          nodeIds.push(node.id);
+        }
+      }
+
+      let linkIds = [];
+      for (let i = workflow.links.length - 1; i >= 0; i--) {
+        if (!workflow.links[i]) {
+          continue;
+        }
+        const l = workflow.links[i];
+        const link = {
+          id: l[0],
+          type: l[5],
+          origin_id: l[1],
+          origin_slot: l[2],
+          target_id: l[3],
+          target_slot: l[4],
+        }
+        // remove links
+        if (nodeIds.indexOf(link.target_id) > -1) {
+          workflow.links.splice(i, 1);
+          linkIds.push(link.id);
+          removedLinks.push(link); 
+        }
+      }
+
+      for (const node of workflow.nodes) {
+        // remove input link
+        if (node.inputs) {
+          for (const input of node.inputs) {
+            if (!input.link) {
+              continue;
+            }
+            if (linkIds.indexOf(input.link) > -1) {
+              input.link = null
+            }
+          }
+        }
+
+        // remove output links
+        // pass: command node has not output
+        // if (node.outputs) {
+        //   for (const output of node.outputs) {
+        //     if (output.links) {
+        //       for (let i = output.links.length - 1; i >= 0; i--) {
+        //         const linkId = output.links[i];
+        //         if (linkIds.indexOf(linkId) > -1) {
+        //           output.links.splice(i, 1);
+        //         }
+        //       }
+        //     }
+        //   }
+        // }
+      }
+
+      return removedLinks;
+    }
   }).bind(this);
 
   // set default value
@@ -804,11 +897,8 @@ function initCommandNode() {
     text += `\n// countQueues => Number: Number of queues.`;
     text += `\n// countLoops => Number: Number of loops.`;
     text += `\n\n// ### Methods`;
-    text += `\n// sound(): Play the sound once.`;
-    text += `\n// start(): Start generation.`;
-    text += `\n// cancel(): Cancel current generation.`;
-    text += `\n// next() => Promise: Load next image.`;
     text += `\n// stop(): Disable auto queue mode.`;
+    text += `\n// sound(): Play the notification sound.`;
     text += `\n// loadDir(dirPath) => Promise: Change dir_path value and load images in directory.`;
     text += `\n// loadFile(filePath) => Promise: Load image by file path.`;
     text += `\n// loadImage(node) => Promise: Load generated image by Save Image node.`;
@@ -825,12 +915,10 @@ function initCommandNode() {
     if (!link_info || link_info.target_slot !== 0) {
       return;
     }
-
     const originNode = app.graph._nodes.find(e => e.id === link_info.origin_id);
     const originSlot = link_info.origin_slot;
     const targetNode = this;
     const targetSlot = link_info.target_slot;
-
     if (!connected) {
       this.pkg39.clear();
     } else {
@@ -838,13 +926,13 @@ function initCommandNode() {
         app.graph.removeLink(link_info.id);
       } else {
         this.pkg39.clear();
-        await this.pkg39.render();
+        await this.pkg39.render("changeConnection");
       }
     }
   }
 
   w.isChanged = false;
-  w.callback = (currValue) => {
+  w.callback = (v) => {
     if (app.configuringGraph) {
       return;
     }
@@ -860,7 +948,7 @@ function initCommandNode() {
       w.prevValue = w.value;
       w.isChanged = false;
       this.pkg39.clear();
-      await this.pkg39.render();
+      await this.pkg39.render("changeCommand");
     }
   }
 

@@ -227,4 +227,4 @@ class LoadImage():
     else:
       mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
 
-    return (image, mask.unsqueeze(0), filename, "pkg39")
+    return (image, mask.unsqueeze(0), filename, "Hello, pkg39!")

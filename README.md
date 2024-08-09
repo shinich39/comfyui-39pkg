@@ -11,7 +11,7 @@ Automation for generating image from image.
 Add node > pkg39 or Search "39"  
 
 - Random: Shuffle connected inputs each queue.  
-- Bind key: Add keybindings to textarea.  
+- Textarea: Add keybindings to textarea.  
 - Load image: Load image in sequentially.
 - Command: Control loaded image using javascript.   
 
@@ -28,6 +28,7 @@ Load selected image at the "Load image" node.
 
 ### Load image node  
 Enter dir_path and index to load image.  
+Create a virtual workflow from embedded workflow in image metadata.  
 Controls \(while selecting the Load image node\):  
 - F5 or Ctrl + r: Reload images.  
 - Left, Right: Change index.  
@@ -43,21 +44,25 @@ Controls \(while selecting the Load image node\):
 - Mouse move while press space bar: Move canvas.  
 
 ### Command node  
-The node can load the embedded workflow in loaded image by javascript.  
+The node can load nodes and values from embedded workflow in loaded image by javascript.  
 Copy and paste to textarea on commnad node and use it after customize.  
 
 - Find node
 ```js
-var srcNode1 = find("TITLE|TYPE"); // in virtual workflow
-var srcNode2 = findLast("TITLE|TYPE"); // in virtual workflow
-var dstNode = find(1); // in real workflow
+// string is search for virtual workflow
+var srcNode1 = find("TITLE|TYPE");
+var srcNode2 = findLast("TITLE|TYPE");
+
+// number is earch for actual workflow
+var dstNode = find(1);
 ```
 
 - Load nodes with connection  
 ```js
-var srcSampler = SAMPLER;
-var dstSampler = find(2); // KSampler node in real workflow
-var replaceNodes = [1]; // Load Checkpoint node id in real workflow
+// SAMPLER === SAMPLERS[SAMPLERS.length - 1]
+var srcSampler = SAMPLER; // Last sampler in virtual workflow
+var dstSampler = find(2); // KSampler node in actual workflow
+var replaceNodes = [1]; // ID of Load Checkpoint node in actual workflow
 load(srcSampler, dstSampler, "positive", replaceNodes);
 load(srcSampler, dstSampler, "negative", replaceNodes);
 load(srcSampler, dstSampler, "latent_image");
@@ -73,7 +78,7 @@ set(srcSampler, widgetValues); // all values
 set(dstSampler, { seed: SEED }); // random seed
 
 // case 2
-load(srcSampler, dstSampler, "seed");
+load(srcSampler, dstSampler, "seed"); // seed in image metadata
 ```
 
 - Stop after run 5 (In auto queue mode)  
@@ -92,6 +97,6 @@ sound();
 
 - [was-node-suite-comfyui](https://github.com/WASasquatch/was-node-suite-comfyui)
 - [comfyui-prompt-reader-node](https://github.com/receyuki/comfyui-prompt-reader-node)
-- [notification sound](https://pixabay.com/sound-effects/duck-quack-112941/)
+- [notification-sound](https://pixabay.com/sound-effects/duck-quack-112941/)
 - [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
 - And default ComfyUI nodes...

@@ -1,4 +1,4 @@
-class BindKey():
+class Textarea():
   def __init__(self):
     pass
 
@@ -7,7 +7,7 @@ class BindKey():
     return {
       "required": {
         "(": ("BOOLEAN", {"default": True}),
-        "{": ("BOOLEAN", {"default": False}),
+        "{": ("BOOLEAN", {"default": True}),
         "[": ("BOOLEAN", {"default": False}),
         "<": ("BOOLEAN", {"default": False}),
         "Tab": ("BOOLEAN", {"default": True}),

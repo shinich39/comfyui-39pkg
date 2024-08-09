@@ -6,7 +6,8 @@ class Command():
   def INPUT_TYPES(cls):
     return {
       "required": {
-        "command": ("STRING", {"default": "", "multiline": True}),
+        "command": ("STRING", {"default": "", "forceInput": True}),
+        "text": ("STRING", {"default": "", "multiline": True}),
       },
     }
   

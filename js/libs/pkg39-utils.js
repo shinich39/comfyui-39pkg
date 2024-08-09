@@ -37,6 +37,10 @@ function getLoadId(node) {
   return node?.properties?.pkg39?.loadId;
 }
 
+function getCommandId(node) {
+  return node?.properties?.pkg39?.commandId;
+}
+
 function getPrevNodeId(node) {
   return node?.properties?.pkg39?.nodeId;
 }
@@ -187,6 +191,7 @@ export {
   isLoadImageNode,
   isCommandNode,
   getLoadId,
+  getCommandId,
   getPrevNodeId,
   isPkg39Node,
   getRandomSeed,

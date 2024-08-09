@@ -1,8 +1,8 @@
 "use strict";
 
 import { app } from "../../../scripts/app.js";
-import { ComfyWidgets } from "../../../scripts/widgets.js";
 import { api } from "../../../scripts/api.js";
+import { ComfyWidgets } from "../../../scripts/widgets.js";
 
 let isSelectionEnabled = typeof window.getSelection !== "undefined";
 let selectedElement = null;
@@ -10,13 +10,17 @@ let histories = [];
 
 const BRACKETS = {
   "(": ["(",")"],
-  "{": ["{","}"],
+  "{": ["{","|}", (ot, or, nt, nr) => nr[0] !== nr[1] ? [nr[1]+1, nr[1]+1] : nr],
   "[": ["[","]"],
   "<": ["<",">"],
 };
 
 const SHORTCUTS = {
   "Tab": "  ",
+}
+
+function getTextareaNodes() {
+  return app.graph._nodes.filter(e => e.comfyClass === "Textarea39");
 }
 
 function getSelectionRange(el) {
@@ -74,7 +78,7 @@ function isShortcut(e) {
 
 function isEnabled({ key }) {
   for (const node of app.graph._nodes) {
-    if (node.comfyClass === "BindKey39") {
+    if (node.comfyClass === "Textarea39") {
       if (!node.widgets) {
         continue;
       }
@@ -88,7 +92,22 @@ function isEnabled({ key }) {
 }
 
 app.registerExtension({
-	name: "shinich39.pkg39.keyboard",
+	name: "shinich39.pkg39.textarea",
+  nodeCreated(node) {
+    if (node.comfyClass === "Textarea39") {
+      for (const w of node.widgets) {
+        w.callback = function(value) {
+          const key = this.name;
+          for (const n of getTextareaNodes()) {
+            const _w = n.widgets?.find(e => e.name === key);
+            if (_w) {
+              _w.value = value;
+            }
+          }
+        }
+      }
+    }
+  },
 	init() {
     if (!isSelectionEnabled) {
       return;
@@ -110,7 +129,8 @@ app.registerExtension({
           return r;
         }
 
-        element.addEventListener("keydown", function(e) {
+        // keybindings
+        element.addEventListener("keydown", async function(e) {
           const { key, ctrlKey, metaKey } = e;
           if (isBracket(e) && isEnabled(e)) {
             e.preventDefault();
@@ -127,6 +147,10 @@ app.registerExtension({
               oldRange[0] + brackets[0].length,
               oldRange[1] + brackets[0].length
             ];
+
+            if (typeof brackets[2] === "function") {
+              newRange = brackets[2](oldText, oldRange, newText, newRange);
+            }
 
             e.target.value = newText;
             e.target.focus();

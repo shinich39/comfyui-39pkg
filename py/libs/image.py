@@ -1,6 +1,3 @@
-from server import PromptServer
-from aiohttp import web
-
 import numpy as np
 import torch
 import os
@@ -203,8 +200,8 @@ class LoadImage():
   
   CATEGORY = "pkg39"
   FUNCTION = "exec"
-  RETURN_TYPES = ("IMAGE", "MASK",)
-  RETURN_NAMES = ("IMAGE", "MASK",)
+  RETURN_TYPES = ("IMAGE", "MASK", "STRING")
+  RETURN_NAMES = ("IMAGE", "MASK", "COMMAND")
 
   def exec(self, dir_path, index, mode, filename, **kwargs):
     orig_name = filename
@@ -230,4 +227,4 @@ class LoadImage():
     else:
       mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
 
-    return (image, mask.unsqueeze(0), filename,)
+    return (image, mask.unsqueeze(0), filename, "pkg39")
